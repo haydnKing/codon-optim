@@ -1,5 +1,8 @@
 import numpy as np, pandas as pd, itertools, random
 import Bio.SeqIO as SeqIO
+import matplotlib.pyplot as plt
+
+from sklearn.decomposition import PCA
 
 random.seed()
 
@@ -41,14 +44,29 @@ def _extract(genome, f):
 		seq = ''.join(list(reversed([complement[b] for b in seq])))
 	return seq
 
+def list_codons():
+	return [''.join(x) for x in itertools.product('ATGC', repeat=3)]
+
+def list_non_stop_codons():
+	return [c for c in list_codons() if c not in codon_table['*']]
+
+def get_bias(seq):
+	d = {}
+	for cdn in list_codons():
+		d[cdn] = 0
+	for cdn in (seq[i:i+3] for i in range(0, len(seq), 3)):
+		if len(cdn) == 3:
+			d[cdn] = d[cdn] + 1
+
+	return pd.Series(d)
+
 class Bias:
 	"""Represent the codon bias in a genome or collection of genes"""
 	def __init__(self, sr):
 		"""Calculate codon bias.
 		sr: genome seqrecord"""
 
-		self._bias = self._from_genome(sr)
-		self._normed = self._normalise()
+		self._from_genome(sr)
 
 	def raw_bias(self):
 		return self._bias
@@ -71,29 +89,25 @@ class Bias:
 			if r < s:
 				return cdn
 
+	def plot_pca(self):
+		plot_pca(self._data)
+
 	def _from_genome(self, sr):
 		CDS = [f for f in sr.features if f.type == 'CDS']
 
-		d = {}
-		for cdn in self._list_codons():
-			d[cdn] = 0
+		self._data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
+															columns = list_codons())
 
-		for cds in CDS:
+		for i,cds in enumerate(CDS):
 			seq = _extract(sr, cds)
-			for cdn in (seq[i:i+3] for i in range(0, len(seq), 3)):
-				if len(cdn) == 3:
-					d[cdn] = d[cdn] + 1
+			self._data.loc[i,:] = get_bias(seq)
 
-		self._CDSs = len(CDS)
-		self._codons = sum(d.values())
 		self._name = sr.name
 
-		return pd.Series(d)
+		self._bias = self._data.sum(0)
+		self._normed = self._get_normed()
 
-	def _list_codons(self):
-		return [''.join(x) for x in itertools.product('ATGC', repeat=3)]
-
-	def _normalise(self):
+	def _get_normed(self):
 		d = {}
 		for aa, cdn_list in codon_table.iteritems():
 			total = float(self._bias[cdn_list].sum())
@@ -101,9 +115,10 @@ class Bias:
 				d[cdn] = self._bias[cdn] / total
 		return pd.Series(d)
 
-
 	def __str__(self):
-		s = ["{}: {:,} CDSs ({:,} codons)".format(self._name, self._CDSs, self._codons),
+		s = ["{}: {:,} CDSs ({:,} codons)".format(self._name, 
+																							len(self._data),
+																							np.sum(self._bias)),
 				 "fields: [triplet] [amino-acid] [normalised frequency] ([count])",]
 		cols = int(np.ceil(np.log10(np.max(self._bias))))
 		cols = cols + cols/3
@@ -121,4 +136,35 @@ class Bias:
 			s.append('')
 		return '\n'.join(s[:-1])
 
+def plot_pca(data, x=0, y=1):
 
+	data = pca_normalise(data)
+	pca = PCA(n_components=max(x,y)+1)
+	pca.fit(data)
+
+	scores = np.zeros((len(data), 2))
+
+	for i,r in data.iterrows():
+		scores[i,0] = np.dot(r, pca.components_[x])
+		scores[i,1] = np.dot(r, pca.components_[y])
+
+	plt.scatter(scores[:,0], scores[:,1])
+	plt.show()
+
+def pca_normalise(data, prior_weight=20.):
+	out = pd.DataFrame(np.zeros((len(data), 61)),
+										 columns=list_non_stop_codons())
+	prior = data.sum(0)
+	for aa, codon_list in codon_table.iteritems():
+		prior[codon_list] = prior[codon_list] / float(prior[codon_list].sum())
+
+	for i,r in data.iterrows():
+		for aa, codon_list in codon_table.iteritems():
+			if aa == '*':
+				continue
+			total = (prior_weight*prior[codon_list].sum()+r[codon_list].sum()) / float(len(codon_list))
+			out.loc[i,codon_list] = (prior_weight*prior[codon_list] + r[codon_list]) / total
+
+	mean = out.mean(0)
+
+	return out - mean

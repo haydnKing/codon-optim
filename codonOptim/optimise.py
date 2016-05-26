@@ -92,6 +92,8 @@ def main():
 		with open(args.save_table, 'w') as f:
 			f.write(str(b))
 
+	b.plot_pca()
+
 	if args.output_folder != '':
 		if not os.path.isdir(args.output_folder):
 			resp = ''
