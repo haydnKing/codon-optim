@@ -47,7 +47,6 @@ class Bias:
 		"""Calculate codon bias.
 		sr: genome seqrecord"""
 
-		self._stat_string = ''
 		self._bias = self._from_genome(sr)
 		self._normed = self._normalise()
 
@@ -56,9 +55,6 @@ class Bias:
 
 	def norm_bias(self):
 		return self._normed
-
-	def stats(self):
-		return self._stat_string
 
 	def emit(self, aa, cutoff=0.):
 		"""Emit a codon to code for the amino acid 'aa'. Ignore codons with 
@@ -88,11 +84,9 @@ class Bias:
 				if len(cdn) == 3:
 					d[cdn] = d[cdn] + 1
 
-		self._stat_string = ("Codon bias table build from {} CDSs, {} codons. " +
-												 "Average CDS length {:.1f} codons").format(
-														len(CDS),
-														sum(d.values()),
-														sum(d.values())/float(len(CDS)))
+		self._CDSs = len(CDS)
+		self._codons = sum(d.values())
+		self._name = sr.name
 
 		return pd.Series(d)
 
@@ -109,11 +103,22 @@ class Bias:
 
 
 	def __str__(self):
-		s = ""
-		for aa in AA:
-			s += "{}:\n".format(aa)
-			for cdn in codon_table[aa]:
-				s += "\t\'{}\': {} ({:.1f}%)\n".format(cdn, self._bias[cdn], self._normed[cdn]*100.)
-		return s
+		s = ["{}: {:,} CDSs ({:,} codons)".format(self._name, self._CDSs, self._codons),
+				 "fields: [triplet] [amino-acid] [normalised frequency] ([count])",]
+		cols = int(np.ceil(np.log10(np.max(self._bias))))
+		cols = cols + cols/3
+		fmt = ("{} ({}) {:2.2f} ({:"+str(cols)+",d})")
+
+		for a in ['T', 'C', 'A', 'G',]:
+			for c in ['T', 'C', 'A', 'G',]:
+				line = []
+				for b in ['T', 'C', 'A', 'G',]:
+					cdn = a+b+c
+					aa = inv_codon_table[cdn]
+					line.append(fmt.format(cdn, aa, self._normed[cdn], self._bias[cdn]))
+
+				s.append('  '.join(line)) 
+			s.append('')
+		return '\n'.join(s[:-1])
 
 

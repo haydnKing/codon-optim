@@ -70,7 +70,6 @@ def main():
 
 	b = bias.Bias(genome)
 
-	print(b.stats())
 	print(b)
 
 
