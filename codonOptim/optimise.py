@@ -4,7 +4,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 import Bio.Alphabet as Alphabet
 
-import argparse, os.path
+import argparse, os.path, os, numpy as np
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
@@ -35,6 +35,19 @@ def get_arguments():
 											required=False,
 											default='',
 											help="Save the codon table to the given file")
+	parser.add_argument("-v", "--versions",
+											required=False,
+											type=int,
+											default=1,
+											help="Number of versions of the gene to produce, "+
+											"useful for screening multiple codon optimised variants "+
+											"for synthesis")
+	parser.add_argument("-o", "--output-folder",
+											required=False,
+											default='',
+											help="Folder to save output in, defaults to the same as "+
+											"the input files")
+											
 #	parser.add_argument("--UTR",
 #											nargs=1,
 #											required=False,
@@ -79,13 +92,38 @@ def main():
 		with open(args.save_table, 'w') as f:
 			f.write(str(b))
 
+	if args.output_folder != '':
+		if not os.path.isdir(args.output_folder):
+			resp = ''
+			while resp.upper() not in ['Y','N',]:
+				resp = raw_input(("Output directory \'{}\' doesn't exist. "+
+													"Create it? [Y/N]: ").format(args.output_folder))
+			if resp.upper() == 'Y':
+				os.mkdir(args.output_folder)
+			else:
+				return
+
 
 	for filename in args.gene_sequence:
 		seq = load_sequence(filename)
-		if args.scheme == "simple":
-			out = codon_optimise(b, seq, args.ignore_rare/100.)
+		head,tail = os.path.split(filename)
+		if args.output_folder != '':
+			head = args.output_folder
+		for v in range(args.versions):
+			if args.scheme == "simple":
+				out = codon_optimise(b, seq, args.ignore_rare/100.)
 
-		SeqIO.write(out, os.path.splitext(filename)[0] + ".optim.fasta", "fasta")
+			if args.versions > 1:
+				cols = int(np.ceil(np.log10(args.versions)))
+				ofile = os.path.join(head, 
+														 os.path.splitext(tail)[0] + 
+														 (".optim.v{:0"+str(cols)+"d}.fasta").format(v))
+				out.description = out.description + " v{}".format(v)
+			else:
+				ofile = os.path.join(head, os.path.splitext(tail)[0] + ".optim.fasta")
+
+			print("Writing to: {}".format(ofile))
+			SeqIO.write(out, ofile, "fasta")
 
 def translate(seq):
 	return [bias.inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
@@ -102,11 +140,10 @@ def codon_optimise(b, sr, rare_codon_cutoff=0.1):
 	if AA != oAA:
 		raise ValueError("Translations don't match")
 
-
 	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
 									 id = sr.id,
 									 name=sr.name,
-									 description=sr.description)
+									 description=sr.description + ". codon optimised")
 	
 
 
