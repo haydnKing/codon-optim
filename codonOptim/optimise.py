@@ -31,6 +31,10 @@ def get_arguments():
 												"Subtilis; setting --ignore-rare=15 will discard "+
 												"\'AUA\' and emit \'AUU\' and \'AUC\' with "+
 												"probabilities 0.57 and 0.43")
+	parser.add_argument("-t", "--save-table",
+											required=False,
+											default='',
+											help="Save the codon table to the given file")
 #	parser.add_argument("--UTR",
 #											nargs=1,
 #											required=False,
@@ -71,6 +75,9 @@ def main():
 	b = bias.Bias(genome)
 
 	print(b)
+	if args.save_table != '':
+		with open(args.save_table, 'w') as f:
+			f.write(str(b))
 
 
 	for filename in args.gene_sequence:
