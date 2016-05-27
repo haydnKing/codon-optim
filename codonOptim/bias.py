@@ -54,6 +54,7 @@ def get_bias(seq):
 	d = {}
 	for cdn in list_codons():
 		d[cdn] = 0
+	seq = str(seq).upper()
 	for cdn in (seq[i:i+3] for i in range(0, len(seq), 3)):
 		if len(cdn) == 3:
 			d[cdn] = d[cdn] + 1
@@ -89,8 +90,40 @@ class Bias:
 			if r < s:
 				return cdn
 
-	def plot_pca(self):
-		plot_pca(self._data)
+	def plot_pca(self, names=[], sequences=[], colors=None, x=0, y=1):
+		if len(names) != len(sequences):
+			raise ValueError("Should have the same number of names and sequences")
+		data = self._data.copy()
+		for n,s in zip(names, sequences):
+			data.loc[n,:] = get_bias(s.seq)
+
+		if not colors:
+			cmap = plt.get_cmap()
+			colors = [cmap(i/float(len(names))) for i in range(len(names))]
+		
+		scores = do_pca(data, x, y, 0.5)
+
+		ax = plt.figure().gca()
+		handles = ([ax.scatter(scores['x'], scores['y'], color='grey'),] +
+						   [ax.scatter(scores.loc[n,'x'], 
+													 scores.loc[n, 'y'], 
+													 color=colors[i%len(colors)])
+								for i,n in enumerate(names)])
+
+		# Shrink current axis by 20%
+		box = ax.get_position()
+		ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+		# Put a legend to the right of the current axis
+		ax.legend(handles, ['genome',] + names, 
+							loc='center left', 
+							bbox_to_anchor=(1, 0.5))
+
+		ax.set_xlabel('$Z_{{{}}}$'.format(x+1))
+		ax.set_ylabel('$Z_{{{}}}$'.format(y+1))
+
+		return ax
+
 
 	def _from_genome(self, sr):
 		CDS = [f for f in sr.features if f.type == 'CDS']
@@ -136,20 +169,21 @@ class Bias:
 			s.append('')
 		return '\n'.join(s[:-1])
 
-def plot_pca(data, x=0, y=1):
+def do_pca(data, x=0, y=1, prior_weight=20):
 
-	data = pca_normalise(data)
+	data = pca_normalise(data, prior_weight)
 	pca = PCA(n_components=max(x,y)+1)
 	pca.fit(data)
 
-	scores = np.zeros((len(data), 2))
+	scores = pd.DataFrame(np.zeros((len(data), 2)),
+												index=data.index,
+												columns=['x','y'])
 
 	for i,r in data.iterrows():
-		scores[i,0] = np.dot(r, pca.components_[x])
-		scores[i,1] = np.dot(r, pca.components_[y])
+		scores.loc[i,'x'] = np.dot(r, pca.components_[x])
+		scores.loc[i,'y'] = np.dot(r, pca.components_[y])
 
-	plt.scatter(scores[:,0], scores[:,1])
-	plt.show()
+	return scores
 
 def pca_normalise(data, prior_weight=20.):
 	out = pd.DataFrame(np.zeros((len(data), 61)),

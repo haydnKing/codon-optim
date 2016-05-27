@@ -5,6 +5,7 @@ from Bio.Seq import Seq
 import Bio.Alphabet as Alphabet
 
 import argparse, os.path, os, numpy as np
+import matplotlib.pyplot as plt
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
@@ -92,8 +93,6 @@ def main():
 		with open(args.save_table, 'w') as f:
 			f.write(str(b))
 
-	b.plot_pca()
-
 	if args.output_folder != '':
 		if not os.path.isdir(args.output_folder):
 			resp = ''
@@ -109,23 +108,34 @@ def main():
 	for filename in args.gene_sequence:
 		seq = load_sequence(filename)
 		head,tail = os.path.split(filename)
+		title,ext = os.path.splitext(tail)
+		print("Optimising \'{}\'".format(title))
 		if args.output_folder != '':
 			head = args.output_folder
+		
+		plot_names = ['original',]
+		plot_sequences = [seq,]
 		for v in range(args.versions):
+			print("\tversion {} / {}".format(v+1, args.versions))
 			if args.scheme == "simple":
 				out = codon_optimise(b, seq, args.ignore_rare/100.)
 
+			plot_names.append('v{}'.format(v))
+			plot_sequences.append(out)
 			if args.versions > 1:
 				cols = int(np.ceil(np.log10(args.versions)))
 				ofile = os.path.join(head, 
-														 os.path.splitext(tail)[0] + 
+														 title + 
 														 (".optim.v{:0"+str(cols)+"d}.fasta").format(v))
 				out.description = out.description + " v{}".format(v)
 			else:
-				ofile = os.path.join(head, os.path.splitext(tail)[0] + ".optim.fasta")
+				ofile = os.path.join(head, title + ".optim.fasta")
 
-			print("Writing to: {}".format(ofile))
 			SeqIO.write(out, ofile, "fasta")
+
+		ax = b.plot_pca(plot_names, plot_sequences)
+		ax.set_title("Codon Optimisation of \'{}\'".format(title))
+		ax.figure.savefig(os.path.join(head, title + ".optim.png"))
 
 def translate(seq):
 	return [bias.inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
