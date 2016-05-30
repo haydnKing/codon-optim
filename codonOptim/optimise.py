@@ -1,4 +1,5 @@
-import bias, rnafold
+import rnafold, random
+from genomestats import GenomeStats, inv_codon_table
 import Bio.SeqIO as SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
@@ -12,14 +13,16 @@ def get_arguments():
 	parser.add_argument("genome", help="Genome file to build codon table from")
 	parser.add_argument("gene_sequence", nargs='+', help="Sequence file(s) to optimise")
 	parser.add_argument("-s", "--scheme", 
-											nargs=1, 
 											required=False, 
 											default="simple",
-											choices=["simple",],
+											choices=["simple","exact","second","isecond"],
 											help="Which optimisation scheme to use. Valid option are "+
 											  "\'simple\' (default): replace each codon with a "+
 												"randomised codon with probability equal to background"+
-												"(subject to --ignore-rare)"
+												"(subject to --ignore-rare)"+
+												"\'exact\': choose codons to match the average codon "+
+												"bias as closely as possible, but order the codons "+
+												"randomly"
 											)
 	parser.add_argument("-r", "--ignore-rare", 
 											required=False,
@@ -86,12 +89,14 @@ def main():
 
 	genome = load_sequence(args.genome)
 
-	b = bias.Bias(genome)
+	gs = GenomeStats(genome)
 
-	print(b)
+	#compare_priors(gs)
+
+	print(gs)
 	if args.save_table != '':
 		with open(args.save_table, 'w') as f:
-			f.write(str(b))
+			f.write(str(gs))
 
 	if args.output_folder != '':
 		if not os.path.isdir(args.output_folder):
@@ -117,8 +122,20 @@ def main():
 		plot_sequences = [seq,]
 		for v in range(args.versions):
 			print("\tversion {} / {}".format(v+1, args.versions))
+			print("scheme: {}".format(args.scheme))
 			if args.scheme == "simple":
-				out = codon_optimise(b, seq, args.ignore_rare/100.)
+				out = simple_optimise(gs, seq, args.ignore_rare/100.)
+			elif args.scheme == "exact":
+				out = exact_optimise(gs, seq, args.ignore_rare/100.)
+			elif args.scheme == "second":
+				out = second_optimise(gs, seq, args.ignore_rare/100.)
+			elif args.scheme == "isecond":
+				out = second_optimise(gs, seq, args.ignore_rare/100., True)
+
+			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq])
+			ax.figure.savefig(os.path.join(head, "{}.s1.png".format(title)))
+			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq], order=2)
+			ax.figure.savefig(os.path.join(head, "{}.s2.png".format(title)))
 
 			plot_names.append('v{}'.format(v))
 			plot_sequences.append(out)
@@ -133,23 +150,78 @@ def main():
 
 			SeqIO.write(out, ofile, "fasta")
 
-		ax = b.plot_pca(plot_names, plot_sequences)
+		ax = gs.plot_pca(plot_names, plot_sequences)
 		ax.set_title("Codon Optimisation of \'{}\'".format(title))
 		ax.figure.savefig(os.path.join(head, title + ".optim.png"))
 
 def translate(seq):
-	return [bias.inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
+	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
 
-def codon_optimise(b, sr, rare_codon_cutoff=0.1):
-
+def exact_optimise(gs, sr, rare_codon_cutoff=0.):
+	
 	AA = translate(str(sr.seq))
+	codons = gs.generate_codons(AA, cutoff=rare_codon_cutoff)
+
 	oseq = []
 	for aa in AA:
-		oseq.append(b.emit(aa, rare_codon_cutoff))
+		cdn = codons[aa].pop(np.random.randint(0, len(codons[aa])))
+		oseq.append(cdn)
 	oseq = ''.join(oseq)
+
+	oAA = translate(oseq)
+	if AA != oAA:
+		print(AA)
+		print(oAA)
+		raise ValueError("Translations don't match")
+
+	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
+									 id = sr.id,
+									 name=sr.name,
+									 description=sr.description + ". codon optimised")
+
+def simple_optimise(gs, sr, rare_codon_cutoff=0.):
+
+	AA = translate(str(sr.seq))
+	oseq = gs.emit(AA, rare_codon_cutoff)
 
 	oAA = translate(oseq) 
 	if AA != oAA:
+		print(AA)
+		print(oAA)
+		raise ValueError("Translations don't match")
+
+	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
+									 id = sr.id,
+									 name=sr.name,
+									 description=sr.description + ". codon optimised")
+
+def second_optimise(gs, sr, rare_codon_cutoff=0., invert=False):
+	
+	AA = translate(str(sr.seq))
+	codons = gs.generate_codons(AA, cutoff=rare_codon_cutoff)
+
+	oseq = []
+	for aa in AA:
+		if not oseq:
+			oseq.append(codons[aa].pop(np.random.randint(0, len(codons[aa]))))
+		else:
+			p = gs.so().loc[oseq[-1], codons[aa]]
+			p = p / float(p.sum())
+			if invert and len(p) > 1:
+				p = 1 - p
+				p = p / float(p.sum())
+			r = random.random()
+			for i,s in enumerate(p.cumsum()):
+				if r < s:
+					oseq.append(codons[aa].pop(i))
+					break
+			
+	oseq = ''.join(oseq)
+
+	oAA = translate(oseq)
+	if AA != oAA:
+		print(AA)
+		print(oAA)
 		raise ValueError("Translations don't match")
 
 	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
@@ -158,6 +230,16 @@ def codon_optimise(b, sr, rare_codon_cutoff=0.1):
 									 description=sr.description + ". codon optimised")
 	
 
+def compare_priors(gs, priors=[0.1, 0.5, 1.0, 5.0, 10., 50., 100,]):
+	cols = 3
+	rows = np.ceil(len(priors)/float(cols))
+
+	fig = plt.figure()
+	for i,p in enumerate(priors):
+		print("{}/{}".format(i+1, len(priors)))
+		gs.plot_pca(prior_weight=p, ax=fig.add_subplot(rows, cols, i+1))
+
+	fig.show()
 
 if __name__ == '__main__':
 	main()
