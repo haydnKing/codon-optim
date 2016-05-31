@@ -171,6 +171,9 @@ class GenomeStats:
 			out[aa] = []
 			for cdn,count in icounts.iterkv():
 				out[aa] = out[aa] + [cdn,]*count
+			#shuffle the list (in some schemes, the codons are taken in list order
+			#when the genome lacks information)
+			random.shuffle(out[aa])
 
 		return out
 

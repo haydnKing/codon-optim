@@ -15,14 +15,29 @@ def get_arguments():
 	parser.add_argument("-s", "--scheme", 
 											required=False, 
 											default="simple",
-											choices=["simple","exact","second","isecond"],
+											choices=["simple",
+															 "exact",
+															 "second_rand",
+															 "second_maximum",
+															 "second_minimum",],
 											help="Which optimisation scheme to use. Valid option are "+
 											  "\'simple\' (default): replace each codon with a "+
 												"randomised codon with probability equal to background"+
-												"(subject to --ignore-rare)"+
+												"(subject to --ignore-rare) "+
 												"\'exact\': choose codons to match the average codon "+
 												"bias as closely as possible, but order the codons "+
-												"randomly"
+												"randomly "+
+												"\'second_*\': Choose overall codon use using the "+
+												"exact method, then choose the ordering of those "+
+												"codons using second order statistics from the genome "+
+												"\'second_rand\': choose second order codons randomly, "+
+												"distributed according to the distribution found in the "+
+												"genome "+
+												"\'second_maximum\': choose the most likely possible "+
+												"codon given the previous codon "+
+												"\'second_minimum\': choose the least likely possible "+
+												"codon given the previous codon - useful for testing "+
+												"second order hypothesis"
 											)
 	parser.add_argument("-r", "--ignore-rare", 
 											required=False,
@@ -121,21 +136,24 @@ def main():
 		plot_names = ['original',]
 		plot_sequences = [seq,]
 		for v in range(args.versions):
-			print("\tversion {} / {}".format(v+1, args.versions))
-			print("scheme: {}".format(args.scheme))
+			if args.versions > 1:
+				print("\tversion {} / {}".format(v+1, args.versions))
+			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
 				out = simple_optimise(gs, seq, args.ignore_rare/100.)
 			elif args.scheme == "exact":
 				out = exact_optimise(gs, seq, args.ignore_rare/100.)
-			elif args.scheme == "second":
-				out = second_optimise(gs, seq, args.ignore_rare/100.)
-			elif args.scheme == "isecond":
-				out = second_optimise(gs, seq, args.ignore_rare/100., True)
+			elif args.scheme == "second_rand":
+				out = second_optimise(gs, seq, args.ignore_rare/100., mode='rand')
+			elif args.scheme == "second_maximum":
+				out = second_optimise(gs, seq, args.ignore_rare/100., mode='maximum')
+			elif args.scheme == "second_minimum":
+				out = second_optimise(gs, seq, args.ignore_rare/100., mode='minimum')
 
 			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq])
-			ax.figure.savefig(os.path.join(head, "{}.s1.png".format(title)))
+			ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, args.scheme)))
 			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq], order=2)
-			ax.figure.savefig(os.path.join(head, "{}.s2.png".format(title)))
+			ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, args.scheme)))
 
 			plot_names.append('v{}'.format(v))
 			plot_sequences.append(out)
@@ -148,11 +166,16 @@ def main():
 			else:
 				ofile = os.path.join(head, title + ".optim.fasta")
 
+			print("|1st order log-prob| = {:.2f} -> {:.2f}".format(gs.score(seq.seq),
+																														 gs.score(out.seq)))
+			print("|2nd order log-prob| = {:.2f} -> {:.2f}".format(gs.so_score(seq.seq),
+																														 gs.so_score(out.seq)))
+
 			SeqIO.write(out, ofile, "fasta")
 
-		ax = gs.plot_pca(plot_names, plot_sequences)
-		ax.set_title("Codon Optimisation of \'{}\'".format(title))
-		ax.figure.savefig(os.path.join(head, title + ".optim.png"))
+		#ax = gs.plot_pca(plot_names, plot_sequences)
+		#ax.set_title("Codon Optimisation of \'{}\'".format(title))
+		#ax.figure.savefig(os.path.join(head, title + ".optim.png"))
 
 def translate(seq):
 	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
@@ -195,7 +218,10 @@ def simple_optimise(gs, sr, rare_codon_cutoff=0.):
 									 name=sr.name,
 									 description=sr.description + ". codon optimised")
 
-def second_optimise(gs, sr, rare_codon_cutoff=0., invert=False):
+def second_optimise(gs, sr, rare_codon_cutoff=0., mode='rand'):
+
+	if mode not in ['rand','maximum','minimum']:
+		raise ValueError("Unknown mode \'{}\'".format(mode))
 	
 	AA = translate(str(sr.seq))
 	codons = gs.generate_codons(AA, cutoff=rare_codon_cutoff)
@@ -206,15 +232,23 @@ def second_optimise(gs, sr, rare_codon_cutoff=0., invert=False):
 			oseq.append(codons[aa].pop(np.random.randint(0, len(codons[aa]))))
 		else:
 			p = gs.so().loc[oseq[-1], codons[aa]]
+			#if there are no instances, make the distribution uniform
+			if p.sum() == 0:
+				p[:] = np.ones(len(p))
 			p = p / float(p.sum())
-			if invert and len(p) > 1:
-				p = 1 - p
-				p = p / float(p.sum())
-			r = random.random()
-			for i,s in enumerate(p.cumsum()):
-				if r < s:
-					oseq.append(codons[aa].pop(i))
-					break
+			if mode == 'rand':
+				r = random.random()
+				for i,s in enumerate(p.cumsum()):
+					if r < s:
+						oseq.append(codons[aa].pop(i))
+						break
+			elif mode == 'maximum':
+				p.index = range(len(p))
+				oseq.append(codons[aa].pop(np.argmax(p)))
+			elif mode == 'minimum':
+				p.index = range(len(p))
+				oseq.append(codons[aa].pop(np.argmin(p)))
+
 			
 	oseq = ''.join(oseq)
 
