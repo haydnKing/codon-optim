@@ -4,14 +4,15 @@ import Bio.SeqIO as SeqIO
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 import Bio.Alphabet as Alphabet
+from util import load_sequence
 
 import argparse, os.path, os, numpy as np
 import matplotlib.pyplot as plt
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
-	parser.add_argument("genome", help="Genome file to build codon table from")
-	parser.add_argument("gene_sequence", nargs='+', help="Sequence file(s) to optimise")
+	parser.add_argument("stats", help="Root name of preprocessed stats files")
+	parser.add_argument("gene_sequence", nargs='?', help="Sequence file(s) to optimise")
 	parser.add_argument("-s", "--scheme", 
 											required=False, 
 											default="simple",
@@ -54,6 +55,19 @@ def get_arguments():
 											required=False,
 											default='',
 											help="Save the codon table to the given file")
+	parser.add_argument("-K", "--cluster",
+											required=False,
+											type=int,
+											default=0,
+											help="Cluseter the PCA scores of each available gene "+
+												"into K clusters using GMM-EM and produce 1st order "+
+												"codon tables based on those cluster weights")
+	parser.add_argument("-p", "--prior-weight",
+											required=False,
+											type=float,
+											default=5.0,
+											help="Weight to give the priors for PCA analysis, "+
+												"should be non-zero")
 	parser.add_argument("-v", "--versions",
 											required=False,
 											type=int,
@@ -84,29 +98,11 @@ def get_arguments():
 
 	return args
 
-def load_sequence(filename):
-
-	try:
-		return SeqIO.read(filename, "fasta")
-	except ValueError:
-		pass
-
-	try:
-		return SeqIO.read(filename, "genbank")
-	except ValueError:
-		pass
-	
-	raise ValueError("Could not load file \'{}\'.".format(filename))
-
 def main():
 
 	args = get_arguments()
 
-	genome = load_sequence(args.genome)
-
-	gs = GenomeStats(genome)
-
-	#compare_priors(gs)
+	gs = GenomeStats.from_file(args.stats)
 
 	print(gs)
 	if args.save_table != '':
@@ -124,6 +120,9 @@ def main():
 			else:
 				return
 
+	if not args.gene_sequence:
+		print("No sequence to optimise")
+		return
 
 	for filename in args.gene_sequence:
 		seq = load_sequence(filename)
@@ -172,10 +171,6 @@ def main():
 																														 gs.so_score(out.seq)))
 
 			SeqIO.write(out, ofile, "fasta")
-
-		#ax = gs.plot_pca(plot_names, plot_sequences)
-		#ax.set_title("Codon Optimisation of \'{}\'".format(title))
-		#ax.figure.savefig(os.path.join(head, title + ".optim.png"))
 
 def translate(seq):
 	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]

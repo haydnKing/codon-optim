@@ -1,7 +1,7 @@
 import numpy as np, pandas as pd, itertools, random
 import Bio.SeqIO as SeqIO
 import matplotlib.pyplot as plt
-
+import os.path
 from sklearn.decomposition import PCA
 
 random.seed()
@@ -84,30 +84,70 @@ def so_normalise(so):
 
 class GenomeStats:
 	"""Represent statistical information about a genome or collection of genes"""
-	def __init__(self, sr):
+	def __init__(self, _name, _data, _second_order, _scores):
 		"""Calculate codon bias in CDS annotations.
 		sr: genome seqrecord"""
 
-		CDS = [f for f in sr.features if f.type == 'CDS']
-
-		self._data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
-															columns = list_codons())
-
-		self._second_order = pd.DataFrame(np.zeros((64,64), dtype=int),
-																			index = list_codons(),
-																			columns = list_codons())
-		
-		self._seqs = [_extract(sr, cds) for cds in CDS]
-		for i,seq in enumerate(self._seqs):
-			self._data.loc[i,:] = get_bias(seq)
-			add_second_order(self._second_order, seq)
-
-		self._name = sr.name
-
+		self._name = _name
+		self._data = _data
+		self._second_order = _second_order
+		self._scores = _scores
 		self._bias = self._data.sum(0)
-
 		self._normed = normalise(self._bias)
 		self._so_normed = so_normalise(self._second_order)
+		
+	@classmethod
+	def from_seqrecord(cls, sr, featuretype='CDS', name=None):
+
+		if not name:
+			name = sr.name
+
+		CDS = [f for f in sr.features if f.type == featuretype]
+
+		_data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
+															columns = list_codons())
+
+		_second_order = pd.DataFrame(np.zeros((64,64), dtype=int),
+																			index = list_codons(),
+																			columns = list_codons())
+
+		_scores = pd.DataFrame(np.zeros((len(CDS), 2), dtype=int), 
+															columns = ['first', 'second',])
+		
+		_seqs = [_extract(sr, cds) for cds in CDS]
+		for i,seq in enumerate(_seqs):
+			_data.loc[i,:] = get_bias(seq)
+			add_second_order(_second_order, seq)
+
+		ret = cls(name, _data, _second_order, _scores)
+		#calculate scores
+		for i,seq in enumerate(_seqs):
+			_scores.at[i,'fo'] = ret.score(seq)
+			_scores.at[i,'so'] = ret.so_score(seq)
+
+		ret._scores = _scores
+		return ret
+
+	def save_stats(self, folder, name=None):
+		if not name:
+			name = self._name
+
+		self._data.to_csv(os.path.join(folder, name + ".1.csv"))
+		self._second_order.to_csv(os.path.join(folder, name + ".2.csv"))
+		self._scores.to_csv(os.path.join(folder, name + ".scores.csv"))
+
+	
+	@classmethod
+	def from_file(cls, folder, name = None):
+		if not name:
+			folder, name = os.path.split(folder)
+
+		_data   = pd.read_csv(os.path.join(folder, name + ".1.csv"), index_col=0)
+		_so     = pd.read_csv(os.path.join(folder, name + ".2.csv"), index_col=0)
+		_scores = pd.read_csv(os.path.join(folder, name + ".scores.csv"), index_col=0)
+
+		return cls(name, _data, _so, _scores)
+
 
 	def raw_bias(self):
 		return self._bias
@@ -203,9 +243,9 @@ class GenomeStats:
 			raise ValueError("order must be 1 or 2, not {}".format(order))
 
 		if order == 1:
-			scores = [self.score(iseq) for iseq in self._seqs]
+			scores = self._scores['first']
 		elif order == 2:
-			scores = [self.so_score(iseq) for iseq in self._seqs]
+			scores = self._scores['second']
 
 		ax = plt.figure().gca()
 
