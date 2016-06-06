@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
 	parser.add_argument("stats", help="Root name of preprocessed stats files")
-	parser.add_argument("gene_sequence", nargs='?', help="Sequence file(s) to optimise")
+	parser.add_argument("gene_sequence", nargs='*', help="Sequence file(s) to optimise")
 	parser.add_argument("-s", "--scheme", 
 											required=False, 
 											default="simple",
@@ -125,6 +125,7 @@ def main():
 		return
 
 	for filename in args.gene_sequence:
+		print("seq = load_sequence({})".format(filename))
 		seq = load_sequence(filename)
 		head,tail = os.path.split(filename)
 		title,ext = os.path.splitext(tail)
@@ -171,6 +172,11 @@ def main():
 																														 gs.so_score(out.seq)))
 
 			SeqIO.write(out, ofile, "fasta")
+
+		ax = gs.plot_pca(plot_names, plot_sequences, prior_weight=args.prior_weight)
+		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
+
+
 
 def translate(seq):
 	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
