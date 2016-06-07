@@ -282,7 +282,8 @@ class GenomeStats:
 			cmap = plt.get_cmap()
 			colors = [cmap(i/float(len(names))) for i in range(len(names))]
 		
-		scores = do_pca(data, x, y, prior_weight)
+		pca = do_pca(data, components=max(x,y)+1, prior_weight=prior_weight)
+		scores = get_pca_scores(pca, data, x, y)
 
 		if not ax:
 			ax = plt.figure().gca()
@@ -297,7 +298,7 @@ class GenomeStats:
 		ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
 		# Put a legend to the right of the current axis
-		ax.legend(handles, ['genome',] + names, 
+		ax.legend(handles, [self._name,] + names, 
 							loc='center left', 
 							bbox_to_anchor=(1, 0.5))
 
@@ -329,11 +330,15 @@ class GenomeStats:
 			s.append('')
 		return '\n'.join(s[:-1])
 
-def do_pca(data, x=0, y=1, prior_weight=20):
+def do_pca(data, components=5, prior_weight=20):
 
 	data = pca_normalise(data, prior_weight)
-	pca = PCA(n_components=max(x,y)+1)
+	pca = PCA(n_components=components)
 	pca.fit(data)
+
+	return pca
+
+def get_pca_scores(pca, data, x=0, y=1):
 
 	scores = pd.DataFrame(np.zeros((len(data), 2)),
 												index=data.index,
@@ -346,8 +351,6 @@ def do_pca(data, x=0, y=1, prior_weight=20):
 	return scores
 
 def pca_normalise(data, prior_weight=20.):
-	out = pd.DataFrame(np.zeros((len(data), 61)),
-										 columns=list_non_stop_codons())
 
 	prior = data.sum(0)
 	for aa, codon_list in codon_table.iteritems():
@@ -358,8 +361,8 @@ def pca_normalise(data, prior_weight=20.):
 			continue
 		n = data[codon_list].add(prior[codon_list], axis=1) 
 		m = n.sum(axis=1) / float(len(codon_list))
-		out[codon_list] = n.div(m, axis=0)
+		data[codon_list] = n.div(m, axis=0)
 
-	mean = out.mean(0)
+	mean = data.mean(0)
 
-	return out - mean
+	return data - mean

@@ -72,7 +72,7 @@ def main():
 		title,ext = os.path.splitext(tail)
 
 		plot_names.append(title)
-		plot_seqs.append(str(seq.seq).upper())
+		plot_seqs.append(seq)
 
 	if not args.prior_scan:
 		print("PCA 1 of 1")
@@ -83,7 +83,7 @@ def main():
 		for i,ps in enumerate(np.linspace(*args.prior_scan)):
 			print("PCA {} of {}".format(i+1, args.prior_scan[2]))
 			ax = f.add_subplot(rows, args.columns, i+1)
-			gs.plot_pca(plot_names, plot_seqs, prior_weight=args.prior_weight, ax=ax)
+			gs.plot_pca(plot_names, plot_seqs, prior_weight=ps, ax=ax)
 			ax.set_title("prior weight = {:.1f}".format(ps))
 
 	f.savefig(args.output_file)
