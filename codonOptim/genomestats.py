@@ -348,16 +348,17 @@ def do_pca(data, x=0, y=1, prior_weight=20):
 def pca_normalise(data, prior_weight=20.):
 	out = pd.DataFrame(np.zeros((len(data), 61)),
 										 columns=list_non_stop_codons())
+
 	prior = data.sum(0)
 	for aa, codon_list in codon_table.iteritems():
-		prior[codon_list] = prior[codon_list] / float(prior[codon_list].sum())
+		prior[codon_list] = prior_weight*prior[codon_list] / float(prior[codon_list].sum())
 
-	for i,r in data.iterrows():
-		for aa, codon_list in codon_table.iteritems():
-			if aa == '*':
-				continue
-			total = (prior_weight*prior[codon_list].sum()+r[codon_list].sum()) / float(len(codon_list))
-			out.loc[i,codon_list] = (prior_weight*prior[codon_list] + r[codon_list]) / total
+	for aa, codon_list in codon_table.iteritems():
+		if aa == '*':
+			continue
+		n = data[codon_list].add(prior[codon_list], axis=1) 
+		m = n.sum(axis=1) / float(len(codon_list))
+		out[codon_list] = n.div(m, axis=0)
 
 	mean = out.mean(0)
 
