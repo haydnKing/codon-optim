@@ -1,13 +1,13 @@
+"""A script for optimisation"""
+
 import rnafold, random
-from genomestats import GenomeStats, inv_codon_table
+from genomestats import GenomeStats
 import Bio.SeqIO as SeqIO
-from Bio.SeqRecord import SeqRecord
-from Bio.Seq import Seq
-import Bio.Alphabet as Alphabet
 from util import load_sequence
 
 import argparse, os.path, os, numpy as np
 import matplotlib.pyplot as plt
+import optim
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
@@ -140,15 +140,15 @@ def main():
 				print("\tversion {} / {}".format(v+1, args.versions))
 			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
-				out = simple_optimise(gs, seq, args.ignore_rare/100.)
+				out = optim.simple(gs, seq, args.ignore_rare/100.)
 			elif args.scheme == "exact":
-				out = exact_optimise(gs, seq, args.ignore_rare/100.)
+				out = optim.exact(gs, seq, args.ignore_rare/100.)
 			elif args.scheme == "second_rand":
-				out = second_optimise(gs, seq, args.ignore_rare/100., mode='rand')
+				out = optim.second(gs, seq, args.ignore_rare/100., mode='rand')
 			elif args.scheme == "second_maximum":
-				out = second_optimise(gs, seq, args.ignore_rare/100., mode='maximum')
+				out = optim.second(gs, seq, args.ignore_rare/100., mode='maximum')
 			elif args.scheme == "second_minimum":
-				out = second_optimise(gs, seq, args.ignore_rare/100., mode='minimum')
+				out = optim.second(gs, seq, args.ignore_rare/100., mode='minimum')
 
 			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq])
 			ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, args.scheme)))
@@ -176,105 +176,6 @@ def main():
 		ax = gs.plot_pca(plot_names, plot_sequences, prior_weight=args.prior_weight)
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
-
-
-def translate(seq):
-	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
-
-def exact_optimise(gs, sr, rare_codon_cutoff=0.):
-	
-	AA = translate(str(sr.seq))
-	codons = gs.generate_codons(AA, cutoff=rare_codon_cutoff)
-
-	oseq = []
-	for aa in AA:
-		cdn = codons[aa].pop(np.random.randint(0, len(codons[aa])))
-		oseq.append(cdn)
-	oseq = ''.join(oseq)
-
-	oAA = translate(oseq)
-	if AA != oAA:
-		print(AA)
-		print(oAA)
-		raise ValueError("Translations don't match")
-
-	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
-									 id = sr.id,
-									 name=sr.name,
-									 description=sr.description + ". codon optimised")
-
-def simple_optimise(gs, sr, rare_codon_cutoff=0.):
-
-	AA = translate(str(sr.seq))
-	oseq = gs.emit(AA, rare_codon_cutoff)
-
-	oAA = translate(oseq) 
-	if AA != oAA:
-		print(AA)
-		print(oAA)
-		raise ValueError("Translations don't match")
-
-	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
-									 id = sr.id,
-									 name=sr.name,
-									 description=sr.description + ". codon optimised")
-
-def second_optimise(gs, sr, rare_codon_cutoff=0., mode='rand'):
-
-	if mode not in ['rand','maximum','minimum']:
-		raise ValueError("Unknown mode \'{}\'".format(mode))
-	
-	AA = translate(str(sr.seq))
-	codons = gs.generate_codons(AA, cutoff=rare_codon_cutoff)
-
-	oseq = []
-	for aa in AA:
-		if not oseq:
-			oseq.append(codons[aa].pop(np.random.randint(0, len(codons[aa]))))
-		else:
-			p = gs.so().loc[oseq[-1], codons[aa]]
-			#if there are no instances, make the distribution uniform
-			if p.sum() == 0:
-				p[:] = np.ones(len(p))
-			p = p / float(p.sum())
-			if mode == 'rand':
-				r = random.random()
-				for i,s in enumerate(p.cumsum()):
-					if r < s:
-						oseq.append(codons[aa].pop(i))
-						break
-			elif mode == 'maximum':
-				p.index = range(len(p))
-				oseq.append(codons[aa].pop(np.argmax(p)))
-			elif mode == 'minimum':
-				p.index = range(len(p))
-				oseq.append(codons[aa].pop(np.argmin(p)))
-
-			
-	oseq = ''.join(oseq)
-
-	oAA = translate(oseq)
-	if AA != oAA:
-		print(AA)
-		print(oAA)
-		raise ValueError("Translations don't match")
-
-	return SeqRecord(Seq(oseq, Alphabet.generic_dna),
-									 id = sr.id,
-									 name=sr.name,
-									 description=sr.description + ". codon optimised")
-	
-
-def compare_priors(gs, priors=[0.1, 0.5, 1.0, 5.0, 10., 50., 100,]):
-	cols = 3
-	rows = np.ceil(len(priors)/float(cols))
-
-	fig = plt.figure()
-	for i,p in enumerate(priors):
-		print("{}/{}".format(i+1, len(priors)))
-		gs.plot_pca(prior_weight=p, ax=fig.add_subplot(rows, cols, i+1))
-
-	fig.show()
 
 if __name__ == '__main__':
 	main()
