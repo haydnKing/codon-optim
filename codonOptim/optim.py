@@ -3,6 +3,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 import Bio.Alphabet as Alphabet
 import util
+import numpy as np
 
 def _translate(seq):
 	return [util.inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
@@ -40,7 +41,7 @@ def simple(gs, sr, rare_codon_cutoff=0.):
 
 def second(gs, sr, rare_codon_cutoff=0., mode='rand'):
 
-	if mode not in ['rand','maximum','minimum']:
+	if mode not in ['rand','maximum','minimum','irand']:
 		raise ValueError("Unknown mode \'{}\'".format(mode))
 	
 	AA = _translate(str(sr.seq))
@@ -56,8 +57,11 @@ def second(gs, sr, rare_codon_cutoff=0., mode='rand'):
 			if p.sum() == 0:
 				p[:] = np.ones(len(p))
 			p = p / float(p.sum())
-			if mode == 'rand':
-				r = random.random()
+			if mode in ['rand', 'irand']:
+				r = np.random.random()
+				if mode == 'irand' and len(p) > 1:
+					p = 1-p
+					p = p / p.sum()
 				for i,s in enumerate(p.cumsum()):
 					if r < s:
 						oseq.append(codons[aa].pop(i))

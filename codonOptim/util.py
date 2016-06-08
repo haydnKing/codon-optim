@@ -1,5 +1,34 @@
 import Bio.SeqIO as SeqIO
 
+AA = ['F', 'L', 'S', 'Y', '*', 'C', 'W', 'P', 'H', 'Q', 'R', 'I', 'M', 'T', 'N', 'K', 'V', 'A', 'D', 'E', 'G']
+codon_table = {
+	'A': ['GCT', 'GCC', 'GCA', 'GCG'], 
+	'C': ['TGT', 'TGC'], 
+	'E': ['GAA', 'GAG'], 
+	'D': ['GAT', 'GAC'], 
+	'G': ['GGT', 'GGC', 'GGA', 'GGG'], 
+	'F': ['TTT', 'TTC'], 
+	'I': ['ATT', 'ATC', 'ATA'], 
+	'H': ['CAT', 'CAC'], 
+	'K': ['AAA', 'AAG'], 
+	'*': ['TAA', 'TAG', 'TGA'], 
+	'M': ['ATG'], 
+	'L': ['TTA', 'TTG', 'CTT', 'CTC', 'CTA', 'CTG'], 
+	'N': ['AAT', 'AAC'], 
+	'Q': ['CAA', 'CAG'], 
+	'P': ['CCT', 'CCC', 'CCA', 'CCG'], 
+	'S': ['TCT', 'TCC', 'TCA', 'TCG', 'AGT', 'AGC'], 
+	'R': ['CGT', 'CGC', 'CGA', 'CGG', 'AGA', 'AGG'], 
+	'T': ['ACT', 'ACC', 'ACA', 'ACG'], 
+	'W': ['TGG'], 
+	'V': ['GTT', 'GTC', 'GTA', 'GTG'], 
+	'Y': ['TAT', 'TAC']
+}
+inv_codon_table = {}
+for aa,cdn_list in codon_table.iteritems():
+	for cdn in cdn_list:
+		inv_codon_table[cdn] = aa
+
 def load_sequence(filename):
 
 	try:

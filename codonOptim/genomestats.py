@@ -3,37 +3,10 @@ import Bio.SeqIO as SeqIO
 import matplotlib.pyplot as plt
 import os.path
 from sklearn.decomposition import PCA
+import util
 
 random.seed()
 
-AA = ['F', 'L', 'S', 'Y', '*', 'C', 'W', 'P', 'H', 'Q', 'R', 'I', 'M', 'T', 'N', 'K', 'V', 'A', 'D', 'E', 'G']
-codon_table = {
-	'A': ['GCT', 'GCC', 'GCA', 'GCG'], 
-	'C': ['TGT', 'TGC'], 
-	'E': ['GAA', 'GAG'], 
-	'D': ['GAT', 'GAC'], 
-	'G': ['GGT', 'GGC', 'GGA', 'GGG'], 
-	'F': ['TTT', 'TTC'], 
-	'I': ['ATT', 'ATC', 'ATA'], 
-	'H': ['CAT', 'CAC'], 
-	'K': ['AAA', 'AAG'], 
-	'*': ['TAA', 'TAG', 'TGA'], 
-	'M': ['ATG'], 
-	'L': ['TTA', 'TTG', 'CTT', 'CTC', 'CTA', 'CTG'], 
-	'N': ['AAT', 'AAC'], 
-	'Q': ['CAA', 'CAG'], 
-	'P': ['CCT', 'CCC', 'CCA', 'CCG'], 
-	'S': ['TCT', 'TCC', 'TCA', 'TCG', 'AGT', 'AGC'], 
-	'R': ['CGT', 'CGC', 'CGA', 'CGG', 'AGA', 'AGG'], 
-	'T': ['ACT', 'ACC', 'ACA', 'ACG'], 
-	'W': ['TGG'], 
-	'V': ['GTT', 'GTC', 'GTA', 'GTG'], 
-	'Y': ['TAT', 'TAC']
-}
-inv_codon_table = {}
-for aa,cdn_list in codon_table.iteritems():
-	for cdn in cdn_list:
-		inv_codon_table[cdn] = aa
 
 
 def _extract(genome, f):
@@ -48,7 +21,7 @@ def list_codons():
 	return [''.join(x) for x in itertools.product('ATGC', repeat=3)]
 
 def list_non_stop_codons():
-	return [c for c in list_codons() if c not in codon_table['*']]
+	return [c for c in list_codons() if c not in util.codon_table['*']]
 
 def get_bias(seq):
 	d = {}
@@ -69,7 +42,7 @@ def add_second_order(so, seq):
 
 def normalise(bias):
 		out = pd.Series(np.zeros(len(bias)), index=bias.index)
-		for aa, cdn_list in codon_table.iteritems():
+		for aa, cdn_list in util.codon_table.iteritems():
 			out[cdn_list] = bias[cdn_list] / float(bias[cdn_list].sum())
 		return out
 
@@ -104,6 +77,8 @@ class GenomeStats:
 
 		CDS = [f for f in sr.features if f.type == featuretype]
 
+		print(CDS[3589])
+
 		_data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
 															columns = list_codons())
 
@@ -111,7 +86,7 @@ class GenomeStats:
 																			index = list_codons(),
 																			columns = list_codons())
 
-		_scores = pd.DataFrame(np.zeros((len(CDS), 2), dtype=int), 
+		_scores = pd.DataFrame(np.zeros((len(CDS), 2)), 
 															columns = ['first', 'second',])
 		
 		_seqs = [_extract(sr, cds) for cds in CDS]
@@ -122,8 +97,8 @@ class GenomeStats:
 		ret = cls(name, _data, _second_order, _scores)
 		#calculate scores
 		for i,seq in enumerate(_seqs):
-			_scores.at[i,'fo'] = ret.score(seq)
-			_scores.at[i,'so'] = ret.so_score(seq)
+			_scores.at[i,'first'] = ret.score(seq)
+			_scores.at[i,'second'] = ret.so_score(seq)
 
 		ret._scores = _scores
 		return ret
@@ -161,13 +136,16 @@ class GenomeStats:
 	def so_normed(self):
 		return self._so_normed
 
+	def name(self):
+		return self._name
+
 	def emit(self, AAseq, cutoff=0.):
 		"""Emit a codon to code for the amino acid 'aa'. Ignore codons with 
 		frequency below cutoff (e.g. 0.1 = 10%)
 		"""
 		values = {}
-		for aa in AA:
-			cdn_list = [c for c in codon_table[aa] if self._normed[c] > cutoff]
+		for aa in util.AA:
+			cdn_list = [c for c in util.codon_table[aa] if self._normed[c] > cutoff]
 			if not cdn_list:
 				raise ValueError("No possible codons for aa=\'{}\'. Try a lower cutoff".format(aa))
 
@@ -192,9 +170,9 @@ class GenomeStats:
 			bias = normalise(bias)
 
 		out = {}
-		for aa in AA:
+		for aa in util.AA:
 			#list all codons which could be used for this aa
-			cdn_list = [c for c in codon_table[aa] if bias[c] > cutoff]
+			cdn_list = [c for c in util.codon_table[aa] if bias[c] > cutoff]
 			#how many codons do we need for this aa?
 			count = len([1 for aas in AAseq if aas == aa])
 			#what number of each codon should we have?
@@ -238,14 +216,13 @@ class GenomeStats:
 
 		return r / (len(seq)/3)
 
-	def plot_score(self, names, seqs, colors=None, order=1):
-		if order not in [1,2]:
-			raise ValueError("order must be 1 or 2, not {}".format(order))
-
+	def plot_score(self, names=[], seqs=[], colors=None, order=1):
 		if order == 1:
 			scores = self._scores['first']
 		elif order == 2:
 			scores = self._scores['second']
+		else:
+			raise ValueError("order must be 1 or 2, not {}".format(order))
 
 		ax = plt.figure().gca()
 
@@ -253,7 +230,9 @@ class GenomeStats:
 			cmap = plt.get_cmap()
 			colors = [cmap(i/float(len(names))) for i in range(len(names))]
 
-		ax.hist(scores, bins=20)
+		#histogram of the scores
+		ax.hist(scores, bins=20, label = 'background', color='gray')
+
 		for name,seq,color in zip(names,seqs,colors):
 			if order == 1:
 				score = self.score(seq)
@@ -269,7 +248,11 @@ class GenomeStats:
 			ax.set_xlabel("Second Order Average log-probability")
 
 		return ax
-		
+
+	def get_pca_scores(self, prior_weight, components):
+		data = self._data.copy()
+		pca = do_pca(data, components=components, prior_weight=prior_weight)
+		return get_pca_scores(pca, data)
 
 	def plot_pca(self, names=[], sequences=[], colors=None, x=0, y=1, prior_weight=0.5, ax=None):
 		if len(names) != len(sequences):
@@ -283,13 +266,13 @@ class GenomeStats:
 			colors = [cmap(i/float(len(names))) for i in range(len(names))]
 		
 		pca = do_pca(data, components=max(x,y)+1, prior_weight=prior_weight)
-		scores = get_pca_scores(pca, data, x, y)
+		scores = get_pca_scores(pca, data)
 
 		if not ax:
 			ax = plt.figure().gca()
-		handles = ([ax.scatter(scores['x'], scores['y'], color='grey'),] +
-						   [ax.scatter(scores.loc[n,'x'], 
-													 scores.loc[n, 'y'], 
+		handles = ([ax.scatter(scores[x], scores[y], color='grey'),] +
+						   [ax.scatter(scores.loc[n, x], 
+													 scores.loc[n, y], 
 													 color=colors[i%len(colors)])
 								for i,n in enumerate(names)])
 
@@ -323,7 +306,7 @@ class GenomeStats:
 				line = []
 				for b in ['T', 'C', 'A', 'G',]:
 					cdn = a+b+c
-					aa = inv_codon_table[cdn]
+					aa = util.inv_codon_table[cdn]
 					line.append(fmt.format(cdn, aa, self._normed[cdn], self._bias[cdn]))
 
 				s.append('  '.join(line)) 
@@ -338,25 +321,23 @@ def do_pca(data, components=5, prior_weight=20):
 
 	return pca
 
-def get_pca_scores(pca, data, x=0, y=1):
+def get_pca_scores(pca, data):
 
-	scores = pd.DataFrame(np.zeros((len(data), 2)),
-												index=data.index,
-												columns=['x','y'])
+	scores = pd.DataFrame(np.zeros((len(data), pca.n_components)),
+												index=data.index)
 
 	for i,r in data.iterrows():
-		scores.loc[i,'x'] = np.dot(r, pca.components_[x])
-		scores.loc[i,'y'] = np.dot(r, pca.components_[y])
+		scores.loc[i,:] = np.dot(pca.components_, r)
 
 	return scores
 
 def pca_normalise(data, prior_weight=20.):
 
 	prior = data.sum(0)
-	for aa, codon_list in codon_table.iteritems():
+	for aa, codon_list in util.codon_table.iteritems():
 		prior[codon_list] = prior_weight*prior[codon_list] / float(prior[codon_list].sum())
 
-	for aa, codon_list in codon_table.iteritems():
+	for aa, codon_list in util.codon_table.iteritems():
 		if aa == '*':
 			continue
 		n = data[codon_list].add(prior[codon_list], axis=1) 

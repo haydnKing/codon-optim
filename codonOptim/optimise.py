@@ -20,7 +20,8 @@ def get_arguments():
 															 "exact",
 															 "second_rand",
 															 "second_maximum",
-															 "second_minimum",],
+															 "second_minimum",
+															 "demo",],
 											help="Which optimisation scheme to use. Valid option are "+
 											  "\'simple\' (default): replace each codon with a "+
 												"randomised codon with probability equal to background"+
@@ -38,7 +39,8 @@ def get_arguments():
 												"codon given the previous codon "+
 												"\'second_minimum\': choose the least likely possible "+
 												"codon given the previous codon - useful for testing "+
-												"second order hypothesis"
+												"second order hypothesis. "+
+												"\'demo\': generate good and bad second order sequences"
 											)
 	parser.add_argument("-r", "--ignore-rare", 
 											required=False,
@@ -98,6 +100,12 @@ def get_arguments():
 
 	return args
 
+def save_score_figs(gs, head, title, scheme, names, seqs):
+	ax = gs.plot_score(names, seqs)
+	ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, scheme)))
+	ax = gs.plot_score(names, seqs, order=2)
+	ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, scheme)))
+
 def main():
 
 	args = get_arguments()
@@ -122,6 +130,10 @@ def main():
 
 	if not args.gene_sequence:
 		print("No sequence to optimise")
+		ax = gs.plot_pca([], 
+										 [],
+										 prior_weight = args.prior_weight)
+		ax.figure.savefig(os.path.join(args.output_folder, gs.name()+".PCA.png"))
 		return
 
 	for filename in args.gene_sequence:
@@ -133,47 +145,47 @@ def main():
 		if args.output_folder != '':
 			head = args.output_folder
 		
-		plot_names = ['original',]
-		plot_sequences = [seq,]
+		names = []
+		sequences = []
+		name_fmt = "v{{:0{}d}}".format(int(np.ceil(np.log10(args.versions))))
 		for v in range(args.versions):
 			if args.versions > 1:
 				print("\tversion {} / {}".format(v+1, args.versions))
 			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
-				out = optim.simple(gs, seq, args.ignore_rare/100.)
+				sequences.append(optim.simple(gs, seq, args.ignore_rare/100.))
+				names.append(name_fmt.format(v))
 			elif args.scheme == "exact":
-				out = optim.exact(gs, seq, args.ignore_rare/100.)
+				sequences.append(optim.exact(gs, seq, args.ignore_rare/100.))
+				names.append(name_fmt.format(v))
 			elif args.scheme == "second_rand":
-				out = optim.second(gs, seq, args.ignore_rare/100., mode='rand')
+				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
+				names.append(name_fmt.format(v))
 			elif args.scheme == "second_maximum":
-				out = optim.second(gs, seq, args.ignore_rare/100., mode='maximum')
+				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
+				names.append(name_fmt.format(v))
 			elif args.scheme == "second_minimum":
-				out = optim.second(gs, seq, args.ignore_rare/100., mode='minimum')
+				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
+				names.append(name_fmt.format(v))
+			elif args.scheme == "demo":
+				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
+				names.append(name_fmt.format(v) + ".max")
+				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='irand'))
+				names.append(name_fmt.format(v) + ".min")
 
-			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq])
-			ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, args.scheme)))
-			ax = gs.plot_score(['original','optimised',], [seq.seq, out.seq], order=2)
-			ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, args.scheme)))
 
-			plot_names.append('v{}'.format(v))
-			plot_sequences.append(out)
-			if args.versions > 1:
-				cols = int(np.ceil(np.log10(args.versions)))
-				ofile = os.path.join(head, 
-														 title + 
-														 (".optim.v{:0"+str(cols)+"d}.fasta").format(v))
-				out.description = out.description + " v{}".format(v)
-			else:
-				ofile = os.path.join(head, title + ".optim.fasta")
+			save_score_figs(gs, head, title, args.scheme, 
+											['original',] + names, 
+											[seq.seq,] + [s.seq for s in sequences])
 
-			print("|1st order log-prob| = {:.2f} -> {:.2f}".format(gs.score(seq.seq),
-																														 gs.score(out.seq)))
-			print("|2nd order log-prob| = {:.2f} -> {:.2f}".format(gs.so_score(seq.seq),
-																														 gs.so_score(out.seq)))
+			for o,n in zip(sequences, names):
+				ofile = os.path.join(head, title + ".optim." + n + ".fasta")
+				o.description = o.description + " v{}".format(v)
+				SeqIO.write(o, ofile, "fasta")
 
-			SeqIO.write(out, ofile, "fasta")
-
-		ax = gs.plot_pca(plot_names, plot_sequences, prior_weight=args.prior_weight)
+		ax = gs.plot_pca(['original',] + names, 
+										 [seq,] + sequences,
+										 prior_weight = args.prior_weight)
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
 
