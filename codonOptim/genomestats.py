@@ -8,13 +8,29 @@ import util
 random.seed()
 
 
+_complement = {'A':'T','T':'A','C':'G','G':'C'}
 
 def _extract(genome, f):
 	"""a zillion times faster than biopython"""
-	seq = str(genome.seq[int(f.location.start):int(f.location.end)]).upper()
-	if f.location.strand < 0:
-		complement = {'A':'T','T':'A','C':'G','G':'C'}
-		seq = ''.join(list(reversed([complement[b] for b in seq])))
+	if f.location_operator:
+		if f.location_operator != 'join':
+			print(("Unsupported location_operator \'{}\', "+
+						 "ignoring feature \'{}\'").format(f.location_operator, 
+																							 f.qualifiers['gene']))
+		locs = f.location.parts
+	else:
+		locs = [f.location,]
+	seq = ''
+	for l in locs:
+		s = str(genome.seq[int(l.start):int(l.end)]).upper()
+		if l.strand < 0:
+			s = ''.join(list(reversed([_complement[b] for b in s])))
+		seq = seq + s
+
+
+	if len(seq) == 0:
+		print("len(seq) = 0")
+		print("locs = {}".format(locs))
 	return seq
 
 def list_codons():
@@ -55,9 +71,27 @@ def so_normalise(so):
 
 	return out
 
+def score(bias, seq):
+	r = 0
+	seq = str(seq).upper()
+	for cdn in [seq[i:i+3] for i in range(0,len(seq),3)]:
+		if len(cdn) == 3:
+			r = r + np.log(bias[cdn])
+
+	return r / (len(seq)/3)
+
+def so_score(so_weight, seq):
+	r = 0
+	seq = str(seq).upper()
+	for cdnA,cdnB in [(seq[i-3:i],seq[i:i+3]) for i in range(3,len(seq),3)]:
+		if len(cdnB) == 3:
+			r = r + np.log(so_weight.at[cdnA,cdnB])
+
+	return r / (len(seq)/3)
+
 class GenomeStats:
 	"""Represent statistical information about a genome or collection of genes"""
-	def __init__(self, _name, _data, _second_order, _scores):
+	def __init__(self, _name, _data, _second_order, _scores, _ndata=None, _nso=None):
 		"""Calculate codon bias in CDS annotations.
 		sr: genome seqrecord"""
 
@@ -66,8 +100,14 @@ class GenomeStats:
 		self._second_order = _second_order
 		self._scores = _scores
 		self._bias = self._data.sum(0)
-		self._normed = normalise(self._bias)
-		self._so_normed = so_normalise(self._second_order)
+		if _ndata is None:
+			self._normed = normalise(self._bias)
+		else:
+			self._normed = _ndata
+		if _nso is None:
+			self._so_normed = so_normalise(self._second_order)
+		else:
+			self._so_normed = _nso
 		
 	@classmethod
 	def from_seqrecord(cls, sr, featuretype='CDS', name=None):
@@ -76,8 +116,6 @@ class GenomeStats:
 			name = sr.name
 
 		CDS = [f for f in sr.features if f.type == featuretype]
-
-		print(CDS[3589])
 
 		_data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
 															columns = list_codons())
@@ -94,14 +132,14 @@ class GenomeStats:
 			_data.loc[i,:] = get_bias(seq)
 			add_second_order(_second_order, seq)
 
-		ret = cls(name, _data, _second_order, _scores)
 		#calculate scores
+		_nd = normalise(_data.sum(0))
+		_nso= so_normalise(_second_order)
 		for i,seq in enumerate(_seqs):
-			_scores.at[i,'first'] = ret.score(seq)
-			_scores.at[i,'second'] = ret.so_score(seq)
+			_scores.at[i,'first'] = score(_nd, seq)
+			_scores.at[i,'second'] = so_score(_nso, seq)
 
-		ret._scores = _scores
-		return ret
+		return cls(name, _data, _second_order, _scores, _nd, _nso)
 
 	def save_stats(self, folder, name=None):
 		if not name:
@@ -195,26 +233,11 @@ class GenomeStats:
 
 		return out
 
-	def score(self, seq, bias=None):
-		if bias is None:
-			bias = self._normed
-
-		r = 0
-		seq = str(seq).upper()
-		for cdn in [seq[i:i+3] for i in range(0,len(seq),3)]:
-			if len(cdn) == 3:
-				r = r + np.log(bias[cdn])
-
-		return r / (len(seq)/3)
+	def score(self, seq):
+		return score(self._normed, seq)
 
 	def so_score(self, seq):
-		r = 0
-		seq = str(seq).upper()
-		for cdnA,cdnB in [(seq[i-3:i],seq[i:i+3]) for i in range(3,len(seq),3)]:
-			if len(cdnB) == 3:
-				r = r + np.log(self._so_normed.at[cdnA,cdnB])
-
-		return r / (len(seq)/3)
+		return so_score(self._so_normed, seq)
 
 	def plot_score(self, names=[], seqs=[], colors=None, order=1):
 		if order == 1:
