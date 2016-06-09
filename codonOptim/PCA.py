@@ -1,4 +1,4 @@
-from genomestats import GenomeStats, inv_codon_table
+from genomestats import GenomeStats
 from util import load_sequence
 
 import argparse, os.path, os, numpy as np
