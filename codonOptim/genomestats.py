@@ -2,7 +2,6 @@ import numpy as np, pandas as pd, itertools, random
 import Bio.SeqIO as SeqIO
 import matplotlib.pyplot as plt
 import os.path
-from sklearn.decomposition import PCA
 import util
 
 random.seed()
@@ -272,49 +271,6 @@ class GenomeStats:
 
 		return ax
 
-	def get_pca_scores(self, prior_weight, components):
-		data = self._data.copy()
-		pca = do_pca(data, components=components, prior_weight=prior_weight)
-		return get_pca_scores(pca, data)
-
-	def plot_pca(self, names=[], sequences=[], colors=None, x=0, y=1, prior_weight=0.5, ax=None):
-		if len(names) != len(sequences):
-			raise ValueError("Should have the same number of names and sequences")
-		data = self._data.copy()
-		for n,s in zip(names, sequences):
-			data.loc[n,:] = get_bias(s.seq)
-
-		if not colors:
-			cmap = plt.get_cmap()
-			colors = [cmap(i/float(len(names))) for i in range(len(names))]
-		
-		pca = do_pca(data, components=max(x,y)+1, prior_weight=prior_weight)
-		scores = get_pca_scores(pca, data)
-
-		if not ax:
-			ax = plt.figure().gca()
-		handles = ([ax.scatter(scores[x], scores[y], color='grey'),] +
-						   [ax.scatter(scores.loc[n, x], 
-													 scores.loc[n, y], 
-													 color=colors[i%len(colors)])
-								for i,n in enumerate(names)])
-
-		# Shrink current axis by 20%
-		box = ax.get_position()
-		ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-
-		# Put a legend to the right of the current axis
-		ax.legend(handles, [self._name,] + names, 
-							loc='center left', 
-							bbox_to_anchor=(1, 0.5))
-
-		ax.set_xlabel('$Z_{{{}}}$'.format(x+1))
-		ax.set_ylabel('$Z_{{{}}}$'.format(y+1))
-
-		return ax
-
-
-
 	def __str__(self):
 		s = ["{}: {:,} CDSs ({:,} codons)".format(self._name, 
 																							len(self._data),
@@ -336,37 +292,3 @@ class GenomeStats:
 			s.append('')
 		return '\n'.join(s[:-1])
 
-def do_pca(data, components=5, prior_weight=20):
-
-	data = pca_normalise(data, prior_weight)
-	pca = PCA(n_components=components)
-	pca.fit(data)
-
-	return pca
-
-def get_pca_scores(pca, data):
-
-	scores = pd.DataFrame(np.zeros((len(data), pca.n_components)),
-												index=data.index)
-
-	for i,r in data.iterrows():
-		scores.loc[i,:] = np.dot(pca.components_, r)
-
-	return scores
-
-def pca_normalise(data, prior_weight=20.):
-
-	prior = data.sum(0)
-	for aa, codon_list in util.codon_table.iteritems():
-		prior[codon_list] = prior_weight*prior[codon_list] / float(prior[codon_list].sum())
-
-	for aa, codon_list in util.codon_table.iteritems():
-		if aa == '*':
-			continue
-		n = data[codon_list].add(prior[codon_list], axis=1) 
-		m = n.sum(axis=1) / float(len(codon_list))
-		data[codon_list] = n.div(m, axis=0)
-
-	mean = data.mean(0)
-
-	return data - mean
