@@ -57,7 +57,7 @@ def add_second_order(so, seq):
 
 def normalise(bias):
 		out = pd.Series(np.zeros(len(bias)), index=bias.index)
-		for aa, cdn_list in util.codon_table.iteritems():
+		for aa, cdn_list in util.codon_table.items():
 			out[cdn_list] = bias[cdn_list] / float(bias[cdn_list].sum())
 		return out
 
