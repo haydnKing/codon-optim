@@ -19,6 +19,7 @@ def get_arguments():
 											choices=["simple",
 															 "exact",
 															 "second_rand",
+															 "second_PCA",
 															 "second_maximum",
 															 "second_minimum",
 															 "demo",],
@@ -114,7 +115,7 @@ def main():
 		if not os.path.isdir(args.output_folder):
 			resp = ''
 			while resp.upper() not in ['Y','N',]:
-				resp = raw_input(("Output directory \'{}\' doesn't exist. "+
+				resp = input(("Output directory \'{}\' doesn't exist. "+
 													"Create it? [Y/N]: ").format(args.output_folder))
 			if resp.upper() == 'Y':
 				os.mkdir(args.output_folder)

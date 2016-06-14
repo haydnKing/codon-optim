@@ -280,7 +280,8 @@ class GenomeStats:
 																							np.sum(self._bias)),
 				 "fields: [triplet] ([amino-acid]) [normalised frequency] ([count])",]
 		cols = int(np.ceil(np.log10(np.max(self._bias))))
-		cols = cols + cols/3
+		#extra for commas
+		cols = cols + int(cols/3)
 		fmt = ("{} ({}) {:2.2f} ({:"+str(cols)+",d})")
 
 		for a in ['T', 'C', 'A', 'G',]:
