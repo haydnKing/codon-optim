@@ -2,6 +2,8 @@
 from sklearn.decomposition import PCA
 from sklearn import mixture
 import matplotlib.pyplot as plt
+import util
+import numpy as np, pandas as pd
 
 
 """Code for performing PCA analysis"""
@@ -18,11 +20,12 @@ class PrincipalComponentAnalysis:
 		
 		#normalise the data
 		self._prior = data.sum(0)
-		self._data = self._normalise(data)
+		self._mean = None
+		self._data = self._normalise(data.copy())
 
 		#perform the PCA
-		pca = PCA(n_components=n_components)
-		pca.fit(self._data)
+		self._pca = PCA(n_components=n_components)
+		self._pca.fit(self._data)
 
 		#get PCA scores
 		self._scores = self._get_scores(self._data)
@@ -62,7 +65,7 @@ class PrincipalComponentAnalysis:
 		for i in range(K):
 			labels[i] = []
 		for i,cls in enumerate(classes):
-			labels[cls].append(ret._scores.index[i])
+			labels[cls].append(data.index[i])
 		for i in range(K):
 			labels["Class {}".format(i+1)] = labels.pop(i)
 
@@ -78,6 +81,9 @@ class PrincipalComponentAnalysis:
 
 		return ret
 
+	def labels(self):
+		return self._labels
+
 	def _get_scores(self, data):
 
 		scores = pd.DataFrame(np.zeros((len(data), 
@@ -85,7 +91,7 @@ class PrincipalComponentAnalysis:
 													index=data.index)
 
 		for i,r in data.iterrows():
-			scores.loc[i,:] = np.dot(pca.components_, r)
+			scores.loc[i,:] = np.dot(self._pca.components_, r)
 
 		return scores
 
@@ -93,19 +99,20 @@ class PrincipalComponentAnalysis:
 	def _normalise(self, data):
 		#weight the prior according to prior_weight
 		prior = self._prior.copy()
-		for aa, codon_list in util.codon_table.iteritems():
+		for aa, codon_list in util.codon_table.items():
 			prior[codon_list] = self._prior_weight*self._prior[codon_list] / float(prior[codon_list].sum())
 
-		for aa, codon_list in util.codon_table.iteritems():
+		for aa, codon_list in util.codon_table.items():
 			if aa == '*':
 				continue
 			n = data[codon_list].add(prior[codon_list], axis=1) 
 			m = n.sum(axis=1) / float(len(codon_list))
 			data[codon_list] = n.div(m, axis=0)
 
-		mean = data.mean(0)
+		if not self._mean:
+			self._mean = data.mean(0)
 
-		return data - mean
+		return data - self._mean
 
 	def plot(self, x=0, y=1, ax=None):
 
@@ -115,8 +122,8 @@ class PrincipalComponentAnalysis:
 		if not ax:
 			ax = plt.figure().gca()
 
-		handles = ([ax.scatter(scores.loc[n, x], 
-													 scores.loc[n, y], 
+		handles = ([ax.scatter(self._scores.loc[n, x], 
+													 self._scores.loc[n, y], 
 													 color=colors[i%len(colors)])
 								for i,n in enumerate(self._labels.values())])
 

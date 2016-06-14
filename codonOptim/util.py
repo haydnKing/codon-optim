@@ -1,4 +1,5 @@
 import Bio.SeqIO as SeqIO
+import pandas as pd, numpy as np
 
 AA = ['F', 'L', 'S', 'Y', '*', 'C', 'W', 'P', 'H', 'Q', 'R', 'I', 'M', 'T', 'N', 'K', 'V', 'A', 'D', 'E', 'G']
 codon_table = {
@@ -55,3 +56,86 @@ def check_folder_exists(name):
 			return False
 	return True
 
+def normalise(codon_counts):
+		out = pd.Series(np.zeros(len(codon_counts)), index=codon_counts.index)
+		for aa, cdn_list in codon_table.items():
+			out[cdn_list] = codon_counts[cdn_list] / float(codon_counts[cdn_list].sum())
+		return out
+
+def so_normalise(so):
+	out = pd.DataFrame(np.zeros((64,64)),
+										 index=so.index,
+										 columns=so.columns)
+	for i in out.index:
+		out.loc[i,:] = normalise(so.loc[i,:])
+
+	return out
+
+def translate(seq):
+	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
+
+_complement = {'A':'T','T':'A','C':'G','G':'C'}
+
+def _extract(genome, f):
+	"""a zillion times faster than biopython"""
+	if f.location_operator:
+		if f.location_operator != 'join':
+			print(("Unsupported location_operator \'{}\', "+
+						 "ignoring feature \'{}\'").format(f.location_operator, 
+																							 f.qualifiers['gene']))
+		locs = f.location.parts
+	else:
+		locs = [f.location,]
+	seq = ''
+	for l in locs:
+		s = str(genome.seq[int(l.start):int(l.end)]).upper()
+		if l.strand < 0:
+			s = ''.join(list(reversed([_complement[b] for b in s])))
+		seq = seq + s
+
+
+	if len(seq) == 0:
+		print("len(seq) = 0")
+		print("locs = {}".format(locs))
+	return seq
+
+def list_codons():
+	return [''.join(x) for x in itertools.product('ATGC', repeat=3)]
+
+def list_non_stop_codons():
+	return [c for c in list_codons() if c not in util.codon_table['*']]
+
+def get_bias(seq):
+	d = {}
+	for cdn in list_codons():
+		d[cdn] = 0
+	seq = str(seq).upper()
+	for cdn in (seq[i:i+3] for i in range(0, len(seq), 3)):
+		if len(cdn) == 3:
+			d[cdn] = d[cdn] + 1
+
+	return pd.Series(d)
+
+def add_second_order(so, seq):
+	seq = str(seq).upper()
+	for cdnA,cdnB in ((seq[i-3:i], seq[i:i+3]) for i in range(3, len(seq), 3)):
+		if len(cdnB) == 3:
+			so.at[cdnA, cdnB] = so.at[cdnA, cdnB] + 1
+
+def score(bias, seq):
+	r = 0
+	seq = str(seq).upper()
+	for cdn in [seq[i:i+3] for i in range(0,len(seq),3)]:
+		if len(cdn) == 3:
+			r = r + np.log(bias[cdn])
+
+	return r / (len(seq)/3)
+
+def so_score(so_weight, seq):
+	r = 0
+	seq = str(seq).upper()
+	for cdnA,cdnB in [(seq[i-3:i],seq[i:i+3]) for i in range(3,len(seq),3)]:
+		if len(cdnB) == 3:
+			r = r + np.log(so_weight.at[cdnA,cdnB])
+
+	return r / (len(seq)/3)

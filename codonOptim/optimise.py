@@ -7,7 +7,7 @@ from util import load_sequence
 
 import argparse, os.path, os, numpy as np
 import matplotlib.pyplot as plt
-import optim
+import optim, PCA
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
@@ -94,10 +94,10 @@ def get_arguments():
 
 	return args
 
-def save_score_figs(gs, head, title, scheme, names, seqs):
-	ax = gs.plot_score(names, seqs)
+def save_score_figs(gs, head, title, scheme, seqs):
+	ax = gs.plot_score([s[0] for s in seqs], [str(s[1].seq) for s in seqs])
 	ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, scheme)))
-	ax = gs.plot_score(names, seqs, order=2)
+	ax = gs.plot_score([s[0] for s in seqs], [str(s[1].seq) for s in seqs], order=2)
 	ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, scheme)))
 
 def main():
@@ -137,35 +137,47 @@ def main():
 		
 		sequences = []
 		for v in range(args.versions):
+			current_seqs = []
 			if args.versions > 1:
 				print("\tversion {} / {}".format(v+1, args.versions))
 			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
-				sequences.append(optim.simple(gs, seq, args.ignore_rare/100.))
+				current_seqs.append(optim.simple(gs, seq, args.ignore_rare/100.))
 			elif args.scheme == "exact":
-				sequences.append(optim.exact(gs, seq, args.ignore_rare/100.))
+				current_seqs.append(optim.exact(gs, seq, args.ignore_rare/100.))
 			elif args.scheme == "second_rand":
-				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
+				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
 			elif args.scheme == "second_PCA":
-				sequences.extend(optim.second_PCA(gs, seq, args.ignore_rare/100., args.clusters))
+				current_seqs.extend(optim.second_PCA(gs, 
+																					seq, 
+																					args.ignore_rare/100., 
+																					args.clusters, 
+																					args.prior_weight))
 			elif args.scheme == "second_maximum":
-				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
+				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
 			elif args.scheme == "second_minimum":
-				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
+				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
 			elif args.scheme == "demo":
-				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
-				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='irand'))
+				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
+				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='irand'))
 
-			for s in sequences:
-				s.name = s.name + ".{}.v{}".format(args.scheme, v)
+			if args.versions > 1:
+				current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]
 
-			save_score_figs(gs, head, title, args.scheme, 
-											[seq,] + sequences)
+			sequences.extend(current_seqs)
 
-			for o,n in zip(sequences, names):
-				ofile = os.path.join(head, title + ".optim." + n + ".fasta")
-				o.description = o.description + " v{}".format(v)
-				SeqIO.write(o, ofile, "fasta")
+		save_score_figs(gs, head, title, args.scheme, 
+										[('original',seq),] + sequences)
+
+		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
+		#for name, seq in sequences:
+			#pca.add_sequence(name, seq)
+		ax = pca.plot()
+		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
+
+		for name, seq in sequences:
+			ofile = os.path.join(head, title + "." + name + ".fasta")
+			SeqIO.write(seq, ofile, "fasta")
 
 if __name__ == '__main__':
 	main()
