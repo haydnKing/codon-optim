@@ -1,5 +1,6 @@
 
 from sklearn.decomposition import PCA
+from sklearn import mixture
 import matplotlib.pyplot as plt
 
 
@@ -8,7 +9,7 @@ import matplotlib.pyplot as plt
 
 class PrincipalComponentAnalysis:
 
-	def __init__(self, data, n_components=5, prior_weight = 1.0, labels={}):
+	def __init__(self, data, n_components=5, prior_weight = 1.0, labels=None):
 		"""Initialise and perform the PCA using n_components
 				labels is a dictionary mapping a string label to a list of data indexes to which they refer"""
 
@@ -25,6 +26,57 @@ class PrincipalComponentAnalysis:
 
 		#get PCA scores
 		self._scores = self._get_scores(self._data)
+
+	@classmethod
+	def from_GenomeStats(cls, gs, n_components=5, prior_weight=1.0):
+		return cls(gs.fo(), 
+							 n_components = n_components, 
+							 prior_weight = prior_weight, 
+							 labels = {gs.name(): gs.fo().index,},)
+
+	@classmethod
+	def from_GMM(cls, 
+							 data, 
+							 K=3, 
+							 PCA_components=3, 
+							 prior_weight=1., 
+							 rename_classes=True, 
+							 covariance_type='diag'):
+		"""Perform PCA and classify resulting scores using GMM/EM"""
+
+		#initiate the object and perform PCA as normal
+		ret = cls(data, PCA_components, prior_weight)
+
+		#perform EM
+		gmm = mixture.GMM(n_components=K, covariance_type=covariance_type)
+		gmm.fit(ret._scores)
+
+		#keep hold of the GMM object
+		ret._gmm = gmm
+
+		#predict classes
+		classes = gmm.predict(ret._scores)
+
+		#generate labels
+		labels = {}
+		for i in range(K):
+			labels[i] = []
+		for i,cls in enumerate(classes):
+			labels[cls].append(ret._scores.index[i])
+		for i in range(K):
+			labels["Class {}".format(i+1)] = labels.pop(i)
+
+		#set the labels
+		ret._labels = labels
+
+		if rename_classes:
+			ax = ret.plot()
+			ax.figure.show()
+			for i in range(K):
+				n = input("Enter new name for class {}: ".format(i+1))
+				ret._labels[n] = ret._labels.pop("Class {}".format(i+1))
+
+		return ret
 
 	def _get_scores(self, data):
 

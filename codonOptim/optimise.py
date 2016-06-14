@@ -57,10 +57,10 @@ def get_arguments():
 											required=False,
 											default='',
 											help="Save the codon table to the given file")
-	parser.add_argument("-K", "--cluster",
+	parser.add_argument("-K", "--clusters",
 											required=False,
 											type=int,
-											default=0,
+											default=3,
 											help="Cluseter the PCA scores of each available gene "+
 												"into K clusters using GMM-EM and produce 1st order "+
 												"codon tables based on those cluster weights")
@@ -130,64 +130,48 @@ def main():
 
 	if not args.gene_sequence:
 		print("No sequence to optimise")
-		ax = gs.plot_pca([], 
-										 [],
-										 prior_weight = args.prior_weight)
-		ax.figure.savefig(os.path.join(args.output_folder, gs.name()+".PCA.png"))
 		return
 
 	for filename in args.gene_sequence:
-		print("seq = load_sequence({})".format(filename))
 		seq = load_sequence(filename)
+		print("seq = load_sequence({}) name = {}".format(filename, seq.name))
 		head,tail = os.path.split(filename)
 		title,ext = os.path.splitext(tail)
 		print("Optimising \'{}\'".format(title))
 		if args.output_folder != '':
 			head = args.output_folder
 		
-		names = []
 		sequences = []
-		name_fmt = "v{{:0{}d}}".format(int(np.ceil(np.log10(args.versions))))
 		for v in range(args.versions):
 			if args.versions > 1:
 				print("\tversion {} / {}".format(v+1, args.versions))
 			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
 				sequences.append(optim.simple(gs, seq, args.ignore_rare/100.))
-				names.append(name_fmt.format(v))
 			elif args.scheme == "exact":
 				sequences.append(optim.exact(gs, seq, args.ignore_rare/100.))
-				names.append(name_fmt.format(v))
 			elif args.scheme == "second_rand":
 				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
-				names.append(name_fmt.format(v))
+			elif args.scheme == "second_PCA":
+				sequences.extend(optim.second_PCA(gs, seq, args.ignore_rare/100., args.clusters))
 			elif args.scheme == "second_maximum":
 				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
-				names.append(name_fmt.format(v))
 			elif args.scheme == "second_minimum":
 				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
-				names.append(name_fmt.format(v))
 			elif args.scheme == "demo":
 				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
-				names.append(name_fmt.format(v) + ".max")
 				sequences.append(optim.second(gs, seq, args.ignore_rare/100., mode='irand'))
-				names.append(name_fmt.format(v) + ".min")
 
+			for s in sequences:
+				s.name = s.name + ".{}.v{}".format(args.scheme, v)
 
 			save_score_figs(gs, head, title, args.scheme, 
-											['original',] + names, 
-											[seq.seq,] + [s.seq for s in sequences])
+											[seq,] + sequences)
 
 			for o,n in zip(sequences, names):
 				ofile = os.path.join(head, title + ".optim." + n + ".fasta")
 				o.description = o.description + " v{}".format(v)
 				SeqIO.write(o, ofile, "fasta")
-
-		ax = gs.plot_pca(['original',] + names, 
-										 [seq,] + sequences,
-										 prior_weight = args.prior_weight)
-		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
-
 
 if __name__ == '__main__':
 	main()

@@ -167,6 +167,9 @@ class GenomeStats:
 	def norm_bias(self):
 		return self._normed
 
+	def fo(self):
+		return self._data
+
 	def so(self):
 		return self._second_order
 
