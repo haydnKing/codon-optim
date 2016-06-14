@@ -1,4 +1,4 @@
-import numpy as np, pandas as pd, itertools
+import numpy as np, pandas as pd
 import Bio.SeqIO as SeqIO
 import matplotlib.pyplot as plt
 import os.path
@@ -31,6 +31,7 @@ class GenomeStats:
 			name = sr.name
 
 		CDS = [f for f in sr.features if f.type == featuretype]
+		print("CDS[112] = {}".format(util._extract(sr, CDS[112])))
 
 		_data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
 															columns = list_codons())
@@ -163,24 +164,7 @@ class GenomeStats:
 		return ax
 
 	def __str__(self):
-		s = ["{}: {:,} CDSs ({:,} codons)".format(self._name, 
-																							len(self._data),
-																							np.sum(self._bias)),
-				 "fields: [triplet] ([amino-acid]) [normalised frequency] ([count])",]
-		cols = int(np.ceil(np.log10(np.max(self._bias))))
-		#extra for commas
-		cols = cols + int(cols/3)
-		fmt = ("{} ({}) {:2.2f} ({:"+str(cols)+",d})")
+		return util.fo_to_string(name=self._name, data=self._data)
 
-		for a in ['T', 'C', 'A', 'G',]:
-			for c in ['T', 'C', 'A', 'G',]:
-				line = []
-				for b in ['T', 'C', 'A', 'G',]:
-					cdn = a+b+c
-					aa = util.inv_codon_table[cdn]
-					line.append(fmt.format(cdn, aa, self._normed[cdn], self._bias[cdn]))
 
-				s.append('  '.join(line)) 
-			s.append('')
-		return '\n'.join(s[:-1])
 

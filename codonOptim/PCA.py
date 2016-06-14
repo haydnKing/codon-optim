@@ -30,6 +30,10 @@ class PrincipalComponentAnalysis:
 		#get PCA scores
 		self._scores = self._get_scores(self._data)
 
+		print("self._scores.loc[112] = {}".format(self._scores.loc[112]))
+		print("self._data.loc[112] = {}".format(self._data.loc[112]))
+
+
 	@classmethod
 	def from_GenomeStats(cls, gs, n_components=5, prior_weight=1.0):
 		return cls(gs.fo(), 
@@ -81,6 +85,19 @@ class PrincipalComponentAnalysis:
 
 		return ret
 
+	def add_sequence(self, label, seq):
+		if type(seq) is str:
+			bias = self._normalise(util.get_bias(seq))
+		else:
+			bias = self._normalise(util.get_bias(str(seq.seq)))
+
+		self._scores.loc[label] = np.dot(self._pca.components_, bias)
+		print("self._scores.loc[{}] = {}".format(label, self._scores.loc[label]))
+		print("bias[{}] = {}".format(label, bias))
+
+		self._labels[label] = [label,]
+		
+
 	def labels(self):
 		return self._labels
 
@@ -105,34 +122,44 @@ class PrincipalComponentAnalysis:
 		for aa, codon_list in util.codon_table.items():
 			if aa == '*':
 				continue
-			n = data[codon_list].add(prior[codon_list], axis=1) 
-			m = n.sum(axis=1) / float(len(codon_list))
+			if type(data) is pd.DataFrame:
+				n = data[codon_list].add(prior[codon_list], axis=1) 
+				m = n.sum(axis=1) / float(len(codon_list))
+			else:
+				n = data[codon_list].add(prior[codon_list]) 
+				m = n / float(len(codon_list))
+
 			data[codon_list] = n.div(m, axis=0)
 
-		if not self._mean:
+		if self._mean is None:
 			self._mean = data.mean(0)
 
 		return data - self._mean
 
-	def plot(self, x=0, y=1, ax=None):
-
-		cmap = plt.get_cmap()
-		colors = [cmap(i/float(len(self._labels))) for i in range(len(self._labels))]
+	def plot(self, x=0, y=1, ax=None, order=None, colors=None):
 		
 		if not ax:
 			ax = plt.figure().gca()
 
-		handles = ([ax.scatter(self._scores.loc[n, x], 
-													 self._scores.loc[n, y], 
+		if not order:
+			order = list(self._labels.keys())
+
+		cmap = plt.get_cmap()
+		if not colors:
+			colors = [cmap(i/float(len(order))) for i in range(len(order))]
+
+		handles = ([ax.scatter(self._scores.loc[self._labels[k], x], 
+													 self._scores.loc[self._labels[k], y], 
 													 color=colors[i%len(colors)])
-								for i,n in enumerate(self._labels.values())])
+								for i,k in enumerate(order)])
 
 		# Shrink current axis by 20%
 		box = ax.get_position()
 		ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
 		# Put a legend to the right of the current axis
-		ax.legend(handles, self._labels.keys(), 
+		ax.legend(handles, 
+							order, 
 							loc='center left', 
 							bbox_to_anchor=(1, 0.5))
 

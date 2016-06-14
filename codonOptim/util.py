@@ -1,5 +1,6 @@
 import Bio.SeqIO as SeqIO
 import pandas as pd, numpy as np
+import itertools
 
 AA = ['F', 'L', 'S', 'Y', '*', 'C', 'W', 'P', 'H', 'Q', 'R', 'I', 'M', 'T', 'N', 'K', 'V', 'A', 'D', 'E', 'G']
 codon_table = {
@@ -103,7 +104,7 @@ def list_codons():
 	return [''.join(x) for x in itertools.product('ATGC', repeat=3)]
 
 def list_non_stop_codons():
-	return [c for c in list_codons() if c not in util.codon_table['*']]
+	return [c for c in list_codons() if c not in codon_table['*']]
 
 def get_bias(seq):
 	d = {}
@@ -139,3 +140,27 @@ def so_score(so_weight, seq):
 			r = r + np.log(so_weight.at[cdnA,cdnB])
 
 	return r / (len(seq)/3)
+
+def fo_to_string(name, data):
+	totals = data.sum(0)
+	normed = normalise(totals)
+	s = ["{}: {:,} CDSs ({:,} codons)".format(name, 
+																						len(data),
+																						np.sum(totals)),
+			 "fields: [triplet] ([amino-acid]) [normalised frequency] ([count])",]
+	cols = int(np.ceil(np.log10(np.max(totals))))
+	#extra for commas
+	cols = cols + int(cols/3)
+	fmt = ("{} ({}) {:2.2f} ({:"+str(cols)+",d})")
+
+	for a in ['T', 'C', 'A', 'G',]:
+		for c in ['T', 'C', 'A', 'G',]:
+			line = []
+			for b in ['T', 'C', 'A', 'G',]:
+				cdn = a+b+c
+				aa = inv_codon_table[cdn]
+				line.append(fmt.format(cdn, aa, normed[cdn], totals[cdn]))
+
+			s.append('  '.join(line)) 
+		s.append('')
+	return '\n'.join(s[:-1])

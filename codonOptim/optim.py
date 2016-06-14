@@ -101,7 +101,10 @@ def second_PCA(gs,
 	for name, indexes in pca.labels().items():
 
 		#calculate first order bias
-		bias = gs.get_bias(indexes)
+		data = gs.fo().loc[indexes]
+
+		print(util.fo_to_string(name, data))
+		bias = util.normalise(data.sum(0))
 
 		#generate codon lists given fo bias	
 		codons = _generate_codons(AAseq, bias, cutoff=rare_codon_cutoff)
@@ -111,7 +114,7 @@ def second_PCA(gs,
 		
 		seq = _verify(sr, oseq)
 
-		ret.append(('second.{}.cluster_{}'.format(mode, name),seq))
+		ret.append(('s.class_{}'.format(name),seq))
 	
 	return ret
 
