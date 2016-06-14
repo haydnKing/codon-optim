@@ -49,7 +49,7 @@ def get_arguments():
 											help="Do not include codons with frequency below given "+
 												"percentage in output. "+
 												"For example \'AUU\', \'AUC\', and \'AUA\' make up "+
-												"49%, 37%, and 13% of Isoleucine codons in Bacillus "+
+												"49%%, 37%%, and 13%% of Isoleucine codons in Bacillus "+
 												"Subtilis; setting --ignore-rare=15 will discard "+
 												"\'AUA\' and emit \'AUU\' and \'AUC\' with "+
 												"probabilities 0.57 and 0.43")
@@ -83,14 +83,7 @@ def get_arguments():
 											help="Folder to save output in, defaults to the same as "+
 											"the input files")
 											
-#	parser.add_argument("--UTR",
-#											nargs=1,
-#											required=False,
-#											help="Sequence file providing the 5'UTR which will be "+
-#											"used for the optimised gene. Secondary structure "+
-#											"in the bases around the RBS (estimated as [-19,+12] "+
-#											"from the start codon) will be minimised while "+
-#											"respecting --ignore-rare if given")
+
 
 	args = parser.parse_args()
 

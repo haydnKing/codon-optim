@@ -25,7 +25,7 @@ codon_table = {
 	'Y': ['TAT', 'TAC']
 }
 inv_codon_table = {}
-for aa,cdn_list in codon_table.iteritems():
+for aa,cdn_list in codon_table.items():
 	for cdn in cdn_list:
 		inv_codon_table[cdn] = aa
 
