@@ -148,6 +148,15 @@ class PrincipalComponentAnalysis:
 			return (data - self._mean).iloc[0]
 		return data - self._mean
 
+	def indexes_from_circle(self, x, y, radius):
+		"""return indexes of all scores that are within the circle"""
+		distances = np.sqrt(np.square(self._scores[0] - x) + 
+												np.square(self._scores[1] - y))
+		return distances[distances <= radius].index
+
+	def label_from_circle(self, name, x, y, radius):
+		self._labels[name] = self.indexes_from_circle(x,y,radius)
+		return self._labels[name]
 
 	def plot(self, x=0, y=1, ax=None, order=None, colors=None):
 		

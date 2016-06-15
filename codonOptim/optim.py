@@ -150,3 +150,28 @@ def _generate_codons(AAseq, bias, cutoff=0.):
 		np.random.shuffle(out[aa])
 
 	return out
+
+def by_PCA(gs, 
+					 sr, 
+					 pca_groups,
+					 rare_codon_cutoff=0.,
+					 prior_weight=1.,
+					 mode='rand'):
+	
+	AAseq = util.translate(str(sr.seq))
+	ret = []
+
+	pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,
+																												prior_weight=prior_weight)
+
+	for name, x, y, r in pca_groups:
+		indexes = pca.label_from_circle(name,x,y,r)
+		codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
+		oseq = _second(gs.so(), AAseq, codons, mode)
+		ret.append(('PCA.{}'.format(name), _verify(sr, oseq),))
+
+	ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
+	ax.figure.show()
+
+	return ret
+

@@ -106,6 +106,8 @@ def get_arguments():
 	return args
 
 def parse_pca_groups(s, parser):
+	if not s:
+		return []
 	ret = []
 	groups = s.split(';')
 	for g in groups:
@@ -178,11 +180,11 @@ def main():
 																					 args.clusters, 
 																					 args.prior_weight))
 			elif args.scheme == "PCA":
-				current_seqs.extend(optim.PCA(gs, 
-																			seq, 
-																			args.ignore_rare/100.,
-																			args.prior_weight,
-																			args.pca_groups))
+				current_seqs.extend(optim.by_PCA(gs, 
+																				 seq, 
+																				 args.pca_groups,
+																				 args.ignore_rare/100.,
+																				 args.prior_weight))
 			elif args.scheme == "second_maximum":
 				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
 			elif args.scheme == "second_minimum":
