@@ -30,8 +30,6 @@ class PrincipalComponentAnalysis:
 		#get PCA scores
 		self._scores = self._get_scores(self._data)
 
-		print("self._scores.loc[112] = {}".format(self._scores.loc[112]))
-		print("self._data.loc[112] = {}".format(self._data.loc[112]))
 
 
 	@classmethod
@@ -87,14 +85,21 @@ class PrincipalComponentAnalysis:
 
 	def add_sequence(self, label, seq):
 		if type(seq) is str:
-			bias = self._normalise(util.get_bias(seq))
+			bias = util.get_bias(seq)
 		else:
-			bias = self._normalise(util.get_bias(str(seq.seq)))
+			bias = util.get_bias(str(seq.seq))
+		original = self._data.loc[112]
+		
+		#make sure the ordering is the same as the original
+		bias = bias.reindex(self._data.columns)
 
+		#normalise
+		bias = self._normalise(bias)
+
+		#get score
 		self._scores.loc[label] = np.dot(self._pca.components_, bias)
-		print("self._scores.loc[{}] = {}".format(label, self._scores.loc[label]))
-		print("bias[{}] = {}".format(label, bias))
 
+		#set label
 		self._labels[label] = [label,]
 		
 
@@ -114,27 +119,35 @@ class PrincipalComponentAnalysis:
 
 
 	def _normalise(self, data):
+		
+		#convert to dataframe
+		itype = type(data)
+		if itype is pd.Series:
+			data = data.to_frame().transpose()
+
+
 		#weight the prior according to prior_weight
 		prior = self._prior.copy()
 		for aa, codon_list in util.codon_table.items():
 			prior[codon_list] = self._prior_weight*self._prior[codon_list] / float(prior[codon_list].sum())
 
+		#normalise by codon and codon box number
 		for aa, codon_list in util.codon_table.items():
 			if aa == '*':
 				continue
-			if type(data) is pd.DataFrame:
-				n = data[codon_list].add(prior[codon_list], axis=1) 
-				m = n.sum(axis=1) / float(len(codon_list))
-			else:
-				n = data[codon_list].add(prior[codon_list]) 
-				m = n / float(len(codon_list))
+			n = data[codon_list].add(prior[codon_list], axis=1) 
+			m = n.sum(axis=1) / float(len(codon_list))
 
 			data[codon_list] = n.div(m, axis=0)
 
 		if self._mean is None:
 			self._mean = data.mean(0)
 
+		#if I was given a series, return a series
+		if itype is pd.Series:
+			return (data - self._mean).iloc[0]
 		return data - self._mean
+
 
 	def plot(self, x=0, y=1, ax=None, order=None, colors=None):
 		

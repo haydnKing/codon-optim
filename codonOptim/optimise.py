@@ -18,8 +18,9 @@ def get_arguments():
 											default="simple",
 											choices=["simple",
 															 "exact",
+															 "auto_PCA",
+															 "PCA",
 															 "second_rand",
-															 "second_PCA",
 															 "second_maximum",
 															 "second_minimum",
 															 "demo",],
@@ -43,6 +44,12 @@ def get_arguments():
 												"second order hypothesis. "+
 												"\'demo\': generate good and bad second order sequences"
 											)
+	parser.add_argument("--pca-groups",
+											required=False,
+											type=lambda x: parse_pca_groups(x, parser),
+											default='',
+											help="Specify the groups for PCA optimisation in the "+
+											"format: G1NAME,G1x,G1y[;G2NAME,G2x,G2y[;G3 ...]]")
 	parser.add_argument("-r", "--ignore-rare", 
 											required=False,
 											type=float,
@@ -92,7 +99,24 @@ def get_arguments():
 		if args.ignore_rare > 100 or args.ignore_rare < 0:
 			raise ValueError("--ignore-rare must be within [0,100] not {}".format(args.ignore_rare))
 
+	if args.scheme == 'PCA':
+		if not args.pca_groups:
+			raise ValueError("argument --pca-groups is required for --scheme=PCA")
+
 	return args
+
+def parse_pca_groups(s, parser):
+	ret = []
+	groups = s.split(';')
+	for g in groups:
+		v = g.split(',')
+		if len(v) != 4:
+			raise parser.error("pca-groups: group spec should include name,x,y,radius \"{}\"".format(g))
+		try:
+			ret.append((v[0], float(v[1]), float(v[2]), float(v[3]),))
+		except ValueError as e:
+			raise parser.error("pca-groups: {}".format(e.args[0]))
+	return ret
 
 def save_score_figs(gs, head, title, scheme, seqs):
 	ax = gs.plot_score([s[0] for s in seqs], [str(s[1].seq) for s in seqs])
@@ -147,12 +171,18 @@ def main():
 				current_seqs.append(optim.exact(gs, seq, args.ignore_rare/100.))
 			elif args.scheme == "second_rand":
 				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
-			elif args.scheme == "second_PCA":
-				current_seqs.extend(optim.second_PCA(gs, 
-																					seq, 
-																					args.ignore_rare/100., 
-																					args.clusters, 
-																					args.prior_weight))
+			elif args.scheme == "auto_PCA":
+				current_seqs.extend(optim.auto_PCA(gs, 
+																					 seq, 
+																					 args.ignore_rare/100., 
+																					 args.clusters, 
+																					 args.prior_weight))
+			elif args.scheme == "PCA":
+				current_seqs.extend(optim.PCA(gs, 
+																			seq, 
+																			args.ignore_rare/100.,
+																			args.prior_weight,
+																			args.pca_groups))
 			elif args.scheme == "second_maximum":
 				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
 			elif args.scheme == "second_minimum":
@@ -170,10 +200,9 @@ def main():
 										[('original',seq),] + sequences)
 
 		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
-		#for name, seq in sequences:
-		#	pca.add_sequence(name, seq)
-		pca.add_sequence('tufA', "ATGGCTAAAGAAAAATTCGACCGTTCCAAATCACATGCCAATATTGGTACAATTGGACACGTTGACCATGGTAAAACAACTTTAACTGCTGCTATCACAACAGTACTTCATAAGAAATCTGGTAAAGGTACAGCTATGGCGTACGATCAAATTGATGGTGCTCCAGAAGAACGCGAGCGCGGTATCACAATCTCTACTGCACACGTTGAGTACGAAACTGAAACTCGTCACTATGCACACGTTGACTGCCCAGGACACGCTGACTATGTTAAAAACATGATCACTGGTGCTGCGCAAATGGACGGAGCTATCCTTGTAGTATCTGCTGCTGATGGCCCAATGCCACAAACTCGTGAGCACATCCTTCTTTCTAAAAACGTTGGTGTACCATACATCGTTGTATTCTTAAACAAATGCGACATGGTAGACGACGAAGAGCTTCTTGAACTAGTTGAAATGGAAGTTCGCGATCTTCTTAGCGAATACGACTTCCCTGGTGATGATGTACCAGTTGTTAAAGGTTCTGCTCTTAAAGCTCTTGAAGGAGACGCTGAGTGGGAAGCTAAAATCTTCGAACTTATGGATGCGGTTGATGAGTACATCCCAACTCCAGAACGCGACACTGAAAAACCATTCATGATGCCAGTTGAGGACGTATTCTCAATCACTGGTCGTGGTACAGTTGCTACTGGCCGTGTAGAACGCGGACAAGTTAAAGTCGGTGACGAAGTTGAAATCATCGGTCTTCAAGAAGAGAACAAGAAAACAACTGTTACAGGTGTTGAAATGTTCCGTAAGCTTCTTGATTACGCTGAAGCTGGTGACAACATTGGTGCCCTTCTTCGCGGTGTATCTCGTGAAGAAATCCAACGTGGTCAAGTACTTGCTAAACCAGGTACAATCACTCCACACAGCAAATTCAAAGCTGAAGTTTACGTTCTTTCTAAAGAAGAGGGTGGACGTCATACTCCATTCTTCTCTAACTACCGTCCTCAGTTCTACTTCCGTACAACTGACGTAACTGGTATCATCCATCTTCCAGAAGGCGTAGAAATGGTTATGCCTGGAGATAACACTGAAATGAACGTTGAACTTATTTCTACAATCGCTATCGAAGAAGGAACTCGTTTCTCTATTCGTGAAGGCGGACGTACTGTTGGTTCAGGCGTTGTTTCTACAATCACTGAGTAA")
-		ax = pca.plot(order=[gs.name(),'tufA'])#+[s[0] for s in sequences]+['tufA',])
+		for name, seq in sequences:
+			pca.add_sequence(name, seq)
+		ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences])
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
 		for name, seq in sequences:

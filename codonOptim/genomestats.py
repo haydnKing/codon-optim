@@ -31,7 +31,6 @@ class GenomeStats:
 			name = sr.name
 
 		CDS = [f for f in sr.features if f.type == featuretype]
-		print("CDS[112] = {}".format(util._extract(sr, CDS[112])))
 
 		_data = pd.DataFrame(np.zeros((len(CDS), 64), dtype=int), 
 															columns = list_codons())

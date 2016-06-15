@@ -79,13 +79,13 @@ def _second(so, AAseq, codons, mode='rand'):
 	return ''.join(oseq)
 
 
-def second_PCA(gs, 
-							 sr, 
-							 rare_codon_cutoff=0., 
-							 GMM_components=3, 
-							 prior_weight=1., 
-							 PCA_components=3,
-							 mode='rand'):
+def auto_PCA(gs, 
+						 sr, 
+						 rare_codon_cutoff=0., 
+						 GMM_components=3, 
+						 prior_weight=1., 
+						 PCA_components=3,
+						 mode='rand'):
 
 	ret = []
 	#Perform PCA and GMM/EM clustering
@@ -103,7 +103,6 @@ def second_PCA(gs,
 		#calculate first order bias
 		data = gs.fo().loc[indexes]
 
-		print(util.fo_to_string(name, data))
 		bias = util.normalise(data.sum(0))
 
 		#generate codon lists given fo bias	
