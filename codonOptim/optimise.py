@@ -190,8 +190,7 @@ def main():
 			elif args.scheme == "second_minimum":
 				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
 			elif args.scheme == "demo":
-				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
-				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='irand'))
+				current_seqs.extend(optim.second_demo(gs, seq, args.ignore_rare/100.))
 
 			if args.versions > 1:
 				current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]

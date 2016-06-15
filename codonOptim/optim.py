@@ -2,7 +2,7 @@
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 import Bio.Alphabet as Alphabet
-import numpy as np, pandas as pd
+import numpy as np, pandas as pd, copy
 import util, PCA
 
 def _verify(in_record, out_str, desc_tag=". codon optimised"):
@@ -175,3 +175,43 @@ def by_PCA(gs,
 
 	return ret
 
+def second_demo(gs, sr, rare_codon_cutoff, repeat=500):
+
+	AAseq = util.translate(str(sr.seq))
+	nb = gs.norm_bias()
+
+	#pre-calculate codon probabilities
+	codon_probs = {}
+	for aa,ct in util.codon_table.items():
+		codon_probs[aa] = (nb[ct] / nb[ct].sum()).cumsum()
+
+
+	best_delta = 0.
+	best_good = ''
+	best_bad = ''
+	for i in range(repeat):
+		#randomly generate codons
+		codons = {}
+		for aa,ct in util.codon_table.items():
+			c = []
+			for i in range(len([1 for aa_ in AAseq if aa_ == aa])):
+				r = np.random.random()
+				for cdn,p in codon_probs[aa].items():
+					if p > r:
+						c.append(cdn)
+						break
+			codons[aa] = c
+
+		bc = copy.deepcopy(codons)
+		good = _second(gs.so(), AAseq, codons, 'rand')
+		bad  = _second(gs.so(), AAseq, bc, 'irand')
+		delta = gs.so_score(good) - gs.so_score(bad)
+		print("delta = {}".format(delta))
+
+		if delta > best_delta:
+			best_delta = delta
+			best_good = good
+			best_bad = bad
+
+	print("best_delta = {}".format(best_delta))
+	return [('good', _verify(sr, best_good),), ('bad', _verify(sr, best_bad))]
