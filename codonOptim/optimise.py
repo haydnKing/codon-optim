@@ -6,7 +6,7 @@ import Bio.SeqIO as SeqIO
 from util import load_sequence
 
 import argparse, os.path, os, numpy as np
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt, matplotlib.patches as mpatches
 import optim, PCA
 
 def get_arguments():
@@ -204,8 +204,16 @@ def main():
 		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
 		for name, seq in sequences:
 			pca.add_sequence(name, seq)
+
+		#dirty hack
+		cmap = plt.get_cmap()
+		cols = [cmap(i/float(len(sequences))) for i in range(len(sequences))]
 		ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences],
-									colors=['gray',])
+									colors=['gray',] + cols)
+		if args.scheme == 'PCA':
+			#draw the circles
+			for (n,x,y,r),c in zip(args.pca_groups, cols):
+				ax.add_patch(mpatches.Circle((x,y), r, fill=False, color=c))
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
 		for name, seq in sequences:
