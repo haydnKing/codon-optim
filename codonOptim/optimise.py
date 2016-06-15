@@ -204,7 +204,8 @@ def main():
 		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
 		for name, seq in sequences:
 			pca.add_sequence(name, seq)
-		ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences])
+		ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences],
+									colors=['gray',])
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
 		for name, seq in sequences:

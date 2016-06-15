@@ -170,8 +170,8 @@ def by_PCA(gs,
 		oseq = _second(gs.so(), AAseq, codons, mode)
 		ret.append(('PCA.{}'.format(name), _verify(sr, oseq),))
 
-	ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
-	ax.figure.show()
+	#ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
+	#ax.figure.show()
 
 	return ret
 

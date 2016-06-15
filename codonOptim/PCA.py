@@ -169,6 +169,8 @@ class PrincipalComponentAnalysis:
 		cmap = plt.get_cmap()
 		if not colors:
 			colors = [cmap(i/float(len(order))) for i in range(len(order))]
+		elif len(colors) < len(order):
+			colors.extend([cmap(i/float(len(order)-len(colors))) for i in range(len(order)-len(colors))])
 
 		handles = ([ax.scatter(self._scores.loc[self._labels[k], x], 
 													 self._scores.loc[self._labels[k], y], 
