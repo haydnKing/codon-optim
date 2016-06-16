@@ -171,9 +171,9 @@ def main():
 
 			#get a translation
 			if not args.amino:
-				str_seq = util.translate(str(sr.seq))
+				str_seq = util.translate(str(sr.seq).upper())
 			else:
-				str_seq = str(sr.seq)
+				str_seq = str(sr.seq).upper()
 			
 			sequences = []
 			for v in range(args.versions):
