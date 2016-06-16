@@ -159,87 +159,89 @@ def main():
 		return
 
 	for filename in args.gene_sequence:
-		sr = util.load_sequence(filename)
+		seq_records = util.load_sequence(filename)
 		head,tail = os.path.split(filename)
 		title,ext = os.path.splitext(tail)
-		print("Optimising \'{}\'".format(title))
-		if args.output_folder != '':
-			head = args.output_folder
-		
+		for sr in seq_records:
+			title = sr.id if len(sr.id) > len(sr.name) else sr.name
+			print("Optimising \'{}\'".format(title))
+			if args.output_folder != '':
+				head = args.output_folder
+			
 
-		#get a translation
-		if not args.amino:
-			str_seq = util.translate(str(sr.seq))
-		else:
-			str_seq = str(sr.seq)
-		
-		sequences = []
-		for v in range(args.versions):
-			current_seqs = []
-			if args.versions > 1:
-				print("\tversion {} / {}".format(v+1, args.versions))
-			print("Using optimisation scheme \'{}\'".format(args.scheme))
-			if args.scheme == "simple":
-				current_seqs.append(optim.simple(gs, str_seq, args.ignore_rare/100.))
-			elif args.scheme == "exact":
-				current_seqs.append(optim.exact(gs, str_seq, args.ignore_rare/100.))
-			elif args.scheme == "second_rand":
-				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='rand'))
-			elif args.scheme == "auto_PCA":
-				current_seqs.extend(optim.auto_PCA(gs, 
+			#get a translation
+			if not args.amino:
+				str_seq = util.translate(str(sr.seq))
+			else:
+				str_seq = str(sr.seq)
+			
+			sequences = []
+			for v in range(args.versions):
+				current_seqs = []
+				if args.versions > 1:
+					print("\tversion {} / {}".format(v+1, args.versions))
+				print("Using optimisation scheme \'{}\'".format(args.scheme))
+				if args.scheme == "simple":
+					current_seqs.append(optim.simple(gs, str_seq, args.ignore_rare/100.))
+				elif args.scheme == "exact":
+					current_seqs.append(optim.exact(gs, str_seq, args.ignore_rare/100.))
+				elif args.scheme == "second_rand":
+					current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='rand'))
+				elif args.scheme == "auto_PCA":
+					current_seqs.extend(optim.auto_PCA(gs, 
+																						 str_seq, 
+																						 args.ignore_rare/100., 
+																						 args.clusters, 
+																						 args.prior_weight))
+				elif args.scheme == "PCA":
+					current_seqs.extend(optim.by_PCA(gs, 
 																					 str_seq, 
-																					 args.ignore_rare/100., 
-																					 args.clusters, 
+																					 args.pca_groups,
+																					 args.ignore_rare/100.,
 																					 args.prior_weight))
-			elif args.scheme == "PCA":
-				current_seqs.extend(optim.by_PCA(gs, 
-																				 str_seq, 
-																				 args.pca_groups,
-																				 args.ignore_rare/100.,
-																				 args.prior_weight))
-			elif args.scheme == "second_maximum":
-				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='maximum'))
-			elif args.scheme == "second_minimum":
-				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='minimum'))
-			elif args.scheme == "demo":
-				current_seqs.extend(optim.second_demo(gs, str_seq, args.ignore_rare/100.))
+				elif args.scheme == "second_maximum":
+					current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='maximum'))
+				elif args.scheme == "second_minimum":
+					current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='minimum'))
+				elif args.scheme == "demo":
+					current_seqs.extend(optim.second_demo(gs, str_seq, args.ignore_rare/100.))
 
-			if args.versions > 1:
-				current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]
+				if args.versions > 1:
+					current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]
 
-			sequences.extend(current_seqs)
+				sequences.extend(current_seqs)
 
-		if not args.amino:
-			save_score_figs(gs, head, title, args.scheme, 
-											[('original',str(sr.seq)),] + sequences)
-		else:
-			save_score_figs(gs, head, title, args.scheme, 
-											sequences)
+			if not args.amino:
+				save_score_figs(gs, head, title, args.scheme, 
+												[('original',str(sr.seq)),] + sequences)
+			else:
+				save_score_figs(gs, head, title, args.scheme, 
+												sequences)
 
 
 
-		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
-		for name, seq in sequences:
-			pca.add_sequence(name, seq)
+			pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
+			for name, seq in sequences:
+				pca.add_sequence(name, seq)
 
-		#dirty hack
-		cmap = plt.get_cmap()
-		cols = [cmap(i/float(len(sequences))) for i in range(len(sequences))]
-		ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences],
-									colors=['gray',] + cols)
-		if args.scheme == 'PCA':
-			#draw the circles
-			for (n,x,y,r),c in zip(args.pca_groups, cols):
-				ax.add_patch(mpatches.Circle((x,y), r, fill=False, color=c))
-		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
+			#dirty hack
+			cmap = plt.get_cmap()
+			cols = [cmap(i/float(len(sequences))) for i in range(len(sequences))]
+			ax = pca.plot(order=[gs.name(),]+[s[0] for s in sequences],
+										colors=['gray',] + cols)
+			if args.scheme == 'PCA':
+				#draw the circles
+				for (n,x,y,r),c in zip(args.pca_groups, cols):
+					ax.add_patch(mpatches.Circle((x,y), r, fill=False, color=c))
+			ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
-		for name, out_str in sequences:
-			ofile = os.path.join(head, title + "." + name + ".fasta")
-			out_sr = SeqRecord(Seq(out_str, Alphabet.generic_dna),
-												 id = sr.id,
-												 name=sr.name,
-												 description=sr.description)
-			SeqIO.write(out_sr, ofile, "fasta")
+			for name, out_str in sequences:
+				ofile = os.path.join(head, title + "." + name + ".fasta")
+				out_sr = SeqRecord(Seq(out_str, Alphabet.generic_dna),
+													 id = sr.id,
+													 name=sr.name,
+													 description=sr.description)
+				SeqIO.write(out_sr, ofile, "fasta")
 
 if __name__ == '__main__':
 	main()

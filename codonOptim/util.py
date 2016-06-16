@@ -34,12 +34,12 @@ for aa,cdn_list in codon_table.items():
 def load_sequence(filename):
 
 	try:
-		return SeqIO.read(filename, "fasta")
+		return [SeqIO.read(filename, "fasta"),]
 	except ValueError:
 		pass
 
 	try:
-		return SeqIO.read(filename, "genbank")
+		return [SeqIO.read(filename, "genbank"),]
 	except ValueError:
 		pass
 	
