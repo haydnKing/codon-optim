@@ -1,50 +1,40 @@
 """Library for optimisations"""
-from Bio.SeqRecord import SeqRecord
-from Bio.Seq import Seq
-import Bio.Alphabet as Alphabet
 import numpy as np, pandas as pd, copy
 import util, PCA
 
-def _verify(in_record, out_str, desc_tag=". codon optimised"):
-	in_aa = util.translate(in_record.seq)
+def _verify(in_aa, out_str):
 	out_aa= util.translate(out_str)
 
 	if out_aa != in_aa:
 		raise ValueError("Optimisation failed: translations don't match")
 
-	return SeqRecord(Seq(out_str, Alphabet.generic_dna),
-									id = in_record.id,
-									name=in_record.name,
-									description=in_record.description + desc_tag)
+	return out_str
 
-def exact(gs, sr, rare_codon_cutoff=0.):
-	AA = util.translate(str(sr.seq))
-	codons = _generate_codons(AA, gs.norm_bias(), cutoff=rare_codon_cutoff)
+def exact(gs, AAseq, rare_codon_cutoff=0.):
+	codons = _generate_codons(AAseq, gs.norm_bias(), cutoff=rare_codon_cutoff)
 
 	oseq = []
-	for aa in AA:
+	for aa in AAseq:
 		cdn = codons[aa].pop(np.random.randint(0, len(codons[aa])))
 		oseq.append(cdn)
 	oseq = ''.join(oseq)
 
-	return ('exact', _verify(sr, ret))
+	return ('exact', _verify(AAseq, ret))
 
-def simple(gs, sr, rare_codon_cutoff=0.):
+def simple(gs, AAseq, rare_codon_cutoff=0.):
 
-	AA = util.translate(str(sr.seq))
-	oseq = gs.emit(AA, rare_codon_cutoff)
+	oseq = gs.emit(AAseq, rare_codon_cutoff)
 
-	return ('simple', _verify(sr, oseq))
+	return ('simple', _verify(AAseq, oseq))
 
-def second(gs, sr, rare_codon_cutoff=0., mode='rand'):
+def second(gs, AAseq, rare_codon_cutoff=0., mode='rand'):
 
 	if mode not in ['rand','maximum','minimum','irand']:
 		raise ValueError("Unknown mode \'{}\'".format(mode))
 	
-	AAseq = util.translate(str(sr.seq))
 	codons = _generate_codons(AAseq, gs.norm_bias(), cutoff=rare_codon_cutoff)
 	oseq = _second(gs.so(), AAseq, codons, mode)
-	return ('second.{}'.format(mode), _verify(sr, oseq))
+	return ('second.{}'.format(mode), _verify(AAseq, oseq))
 
 
 def _second(so, AAseq, codons, mode='rand'):
@@ -80,7 +70,7 @@ def _second(so, AAseq, codons, mode='rand'):
 
 
 def auto_PCA(gs, 
-						 sr, 
+						 AAseq, 
 						 rare_codon_cutoff=0., 
 						 GMM_components=3, 
 						 prior_weight=1., 
@@ -93,9 +83,6 @@ def auto_PCA(gs,
 																								K=GMM_components,
 																								PCA_components=PCA_components,
 																								prior_weight=prior_weight)
-
-	#Amino acid sequence
-	AAseq = util.translate(str(sr.seq))
 
 	#for each cluster
 	for name, indexes in pca.labels().items():
@@ -111,7 +98,7 @@ def auto_PCA(gs,
 		#order codons according to whole genome so preference
 		oseq = _second(gs.so(), AAseq, codons, mode)
 		
-		seq = _verify(sr, oseq)
+		seq = _verify(AAseq, oseq)
 
 		ret.append(('s.class_{}'.format(name),seq))
 	
@@ -152,13 +139,12 @@ def _generate_codons(AAseq, bias, cutoff=0.):
 	return out
 
 def by_PCA(gs, 
-					 sr, 
+					 AAseq, 
 					 pca_groups,
 					 rare_codon_cutoff=0.,
 					 prior_weight=1.,
 					 mode='rand'):
 	
-	AAseq = util.translate(str(sr.seq))
 	ret = []
 
 	pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,
@@ -168,16 +154,15 @@ def by_PCA(gs,
 		indexes = pca.label_from_circle(name,x,y,r)
 		codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
 		oseq = _second(gs.so(), AAseq, codons, mode)
-		ret.append(('PCA.{}'.format(name), _verify(sr, oseq),))
+		ret.append(('PCA.{}'.format(name), _verify(AAseq, oseq),))
 
 	#ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
 	#ax.figure.show()
 
 	return ret
 
-def second_demo(gs, sr, rare_codon_cutoff, repeat=500):
+def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 
-	AAseq = util.translate(str(sr.seq))
 	nb = gs.norm_bias()
 
 	#pre-calculate codon probabilities
@@ -214,4 +199,4 @@ def second_demo(gs, sr, rare_codon_cutoff, repeat=500):
 			best_bad = bad
 
 	print("best_delta = {}".format(best_delta))
-	return [('good', _verify(sr, best_good),), ('bad', _verify(sr, best_bad))]
+	return [('good', _verify(AAseq, best_good),), ('bad', _verify(AAseq, best_bad))]

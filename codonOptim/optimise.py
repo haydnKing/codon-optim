@@ -3,11 +3,13 @@
 import rnafold, random
 from genomestats import GenomeStats
 import Bio.SeqIO as SeqIO
-from util import load_sequence
+from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+import Bio.Alphabet as Alphabet
 
 import argparse, os.path, os, numpy as np
 import matplotlib.pyplot as plt, matplotlib.patches as mpatches
-import optim, PCA
+import optim, PCA, util
 
 def get_arguments():
 	parser = argparse.ArgumentParser(description="Perform codon optimisation")
@@ -90,6 +92,10 @@ def get_arguments():
 											default='',
 											help="Folder to save output in, defaults to the same as "+
 											"the input files")
+	parser.add_argument("--amino",
+											action='store_true',
+											help="Input sequence to optimise is an amino acid "+
+											"not a DNA sequence")
 											
 
 
@@ -121,9 +127,9 @@ def parse_pca_groups(s, parser):
 	return ret
 
 def save_score_figs(gs, head, title, scheme, seqs):
-	ax = gs.plot_score([s[0] for s in seqs], [str(s[1].seq) for s in seqs])
+	ax = gs.plot_score([s[0] for s in seqs], [s[1] for s in seqs])
 	ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, scheme)))
-	ax = gs.plot_score([s[0] for s in seqs], [str(s[1].seq) for s in seqs], order=2)
+	ax = gs.plot_score([s[0] for s in seqs], [s[1] for s in seqs], order=2)
 	ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, scheme)))
 
 def main():
@@ -153,13 +159,19 @@ def main():
 		return
 
 	for filename in args.gene_sequence:
-		seq = load_sequence(filename)
-		print("seq = load_sequence({}) name = {}".format(filename, seq.name))
+		sr = util.load_sequence(filename)
 		head,tail = os.path.split(filename)
 		title,ext = os.path.splitext(tail)
 		print("Optimising \'{}\'".format(title))
 		if args.output_folder != '':
 			head = args.output_folder
+		
+
+		#get a translation
+		if not args.amino:
+			str_seq = util.translate(str(sr.seq))
+		else:
+			str_seq = str(sr.seq)
 		
 		sequences = []
 		for v in range(args.versions):
@@ -168,37 +180,43 @@ def main():
 				print("\tversion {} / {}".format(v+1, args.versions))
 			print("Using optimisation scheme \'{}\'".format(args.scheme))
 			if args.scheme == "simple":
-				current_seqs.append(optim.simple(gs, seq, args.ignore_rare/100.))
+				current_seqs.append(optim.simple(gs, str_seq, args.ignore_rare/100.))
 			elif args.scheme == "exact":
-				current_seqs.append(optim.exact(gs, seq, args.ignore_rare/100.))
+				current_seqs.append(optim.exact(gs, str_seq, args.ignore_rare/100.))
 			elif args.scheme == "second_rand":
-				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='rand'))
+				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='rand'))
 			elif args.scheme == "auto_PCA":
 				current_seqs.extend(optim.auto_PCA(gs, 
-																					 seq, 
+																					 str_seq, 
 																					 args.ignore_rare/100., 
 																					 args.clusters, 
 																					 args.prior_weight))
 			elif args.scheme == "PCA":
 				current_seqs.extend(optim.by_PCA(gs, 
-																				 seq, 
+																				 str_seq, 
 																				 args.pca_groups,
 																				 args.ignore_rare/100.,
 																				 args.prior_weight))
 			elif args.scheme == "second_maximum":
-				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='maximum'))
+				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='maximum'))
 			elif args.scheme == "second_minimum":
-				current_seqs.append(optim.second(gs, seq, args.ignore_rare/100., mode='minimum'))
+				current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='minimum'))
 			elif args.scheme == "demo":
-				current_seqs.extend(optim.second_demo(gs, seq, args.ignore_rare/100.))
+				current_seqs.extend(optim.second_demo(gs, str_seq, args.ignore_rare/100.))
 
 			if args.versions > 1:
 				current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]
 
 			sequences.extend(current_seqs)
 
-		save_score_figs(gs, head, title, args.scheme, 
-										[('original',seq),] + sequences)
+		if not args.amino:
+			save_score_figs(gs, head, title, args.scheme, 
+											[('original',str(sr.seq)),] + sequences)
+		else:
+			save_score_figs(gs, head, title, args.scheme, 
+											sequences)
+
+
 
 		pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
 		for name, seq in sequences:
@@ -215,9 +233,13 @@ def main():
 				ax.add_patch(mpatches.Circle((x,y), r, fill=False, color=c))
 		ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
 
-		for name, seq in sequences:
+		for name, out_str in sequences:
 			ofile = os.path.join(head, title + "." + name + ".fasta")
-			SeqIO.write(seq, ofile, "fasta")
+			out_sr = SeqRecord(Seq(out_str, Alphabet.generic_dna),
+												 id = sr.id,
+												 name=sr.name,
+												 description=sr.description)
+			SeqIO.write(out_sr, ofile, "fasta")
 
 if __name__ == '__main__':
 	main()
