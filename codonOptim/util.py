@@ -73,7 +73,7 @@ def so_normalise(so):
 	return out
 
 def translate(seq):
-	return [inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)]
+	return ''.join([inv_codon_table[str(seq[i:i+3]).upper()] for i in range(0, len(seq), 3)])
 
 _complement = {'A':'T','T':'A','C':'G','G':'C'}
 

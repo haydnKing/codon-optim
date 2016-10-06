@@ -6,6 +6,8 @@ def _verify(in_aa, out_str):
 	out_aa= util.translate(out_str)
 
 	if out_aa != in_aa:
+		print("in : {}".format(in_aa))
+		print("out: {}".format(out_aa))
 		raise ValueError("Optimisation failed: translations don't match")
 
 	return out_str
@@ -118,6 +120,7 @@ def _generate_codons(AAseq, bias, cutoff=0.):
 		count = len([1 for aas in AAseq if aas == aa])
 		#what number of each codon should we have?
 		counts = (bias[cdn_list] / np.sum(bias[cdn_list]))*count
+
 		#sort by smallest residual
 		counts = pd.DataFrame({'c':counts, 
 													 'r':np.abs(counts-np.around(counts))
@@ -127,7 +130,8 @@ def _generate_codons(AAseq, bias, cutoff=0.):
 		icounts = pd.Series(np.zeros(len(counts), dtype=int), index=counts.index)
 		for i in range(len(counts)):
 			icounts[i] = int(np.round(counts[i]+overflow))
-			overflow = counts[i] - icounts[i]
+			overflow = overflow + counts[i] - icounts[i]
+
 		#list of codons
 		out[aa] = []
 		for cdn,count in icounts.iteritems():
