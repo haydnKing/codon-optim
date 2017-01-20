@@ -164,3 +164,9 @@ def fo_to_string(name, data):
 			s.append('  '.join(line)) 
 		s.append('')
 	return '\n'.join(s[:-1])
+
+_rc_lookup = {'A':'T', 'T':'A', 'G':'C', 'C':'G'}
+def reverse_complement(seq):
+    seq = seq.upper()
+    return ''.join([_rc_lookup[b] for b in reversed(seq)])
+
