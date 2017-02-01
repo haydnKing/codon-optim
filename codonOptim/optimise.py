@@ -20,8 +20,7 @@ def get_arguments():
             default="simple",
             choices=["simple",
                 "exact",
-                "auto_PCA",
-                "PCA",
+                "groups",
                 "second_rand",
                 "second_maximum",
                 "second_minimum",
@@ -46,12 +45,13 @@ def get_arguments():
             "second order hypothesis. "+
             "\'demo\': generate good and bad second order sequences"
             )
-    parser.add_argument("--pca-groups",
+    parser.add_argument("--groups",
             required=False,
             type=lambda x: parse_pca_groups(x, parser),
             default='',
-            help="Specify the groups for PCA optimisation in the "+
-            "format: G1NAME,G1x,G1y[;G2NAME,G2x,G2y[;G3 ...]]")
+            help="Specify the groups for optimisation based on a "+
+            "subset of the genes: "+
+            "G1NAME,G1x,G1y[;G2NAME,G2x,G2y[;G3 ...]]")
     parser.add_argument("-r", "--ignore-rare", 
             required=False,
             type=float,
@@ -63,23 +63,6 @@ def get_arguments():
             "Subtilis; setting --ignore-rare=15 will discard "+
             "\'AUA\' and emit \'AUU\' and \'AUC\' with "+
             "probabilities 0.57 and 0.43")
-    parser.add_argument("-t", "--save-table",
-            required=False,
-            default='',
-            help="Save the codon table to the given file")
-    parser.add_argument("-K", "--clusters",
-            required=False,
-            type=int,
-            default=3,
-            help="Cluseter the PCA scores of each available gene "+
-            "into K clusters using GMM-EM and produce 1st order "+
-            "codon tables based on those cluster weights")
-    parser.add_argument("-p", "--prior-weight",
-            required=False,
-            type=float,
-            default=5.0,
-            help="Weight to give the priors for PCA analysis, "+
-            "should be non-zero")
     parser.add_argument("-v", "--versions",
             required=False,
             type=int,
@@ -200,9 +183,6 @@ def main():
     gs = GenomeStats.from_file(args.stats)
 
     print(gs)
-    if args.save_table != '':
-        with open(args.save_table, 'w') as f:
-            f.write(str(gs))
 
     if args.output_folder != '':
         if not os.path.isdir(args.output_folder):
@@ -223,6 +203,8 @@ def main():
         print("No sequence to optimise")
         return
 
+    optimisations = []
+
     for filename in args.gene_sequence:
         seq_records = util.load_sequence(filename)
         head,tail = os.path.split(filename)
@@ -240,79 +222,21 @@ def main():
             else:
                 str_seq = str(sr.seq).upper()
 
-            sequences = []
-            for v in range(args.versions):
-                current_seqs = []
-                if args.scheme == "simple":
-                    current_seqs.append(optim.simple(gs, str_seq, args.ignore_rare/100.))
-                elif args.scheme == "exact":
-                    current_seqs.append(optim.exact(gs, str_seq, args.ignore_rare/100.))
-                elif args.scheme == "second_rand":
-                    current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='rand'))
-                elif args.scheme == "auto_PCA":
-                    current_seqs.extend(optim.auto_PCA(gs, 
-                        str_seq, 
-                        args.ignore_rare/100., 
-                        args.clusters, 
-                        args.prior_weight))
-                elif args.scheme == "PCA":
-                    current_seqs.extend(optim.by_PCA(gs, 
-                        str_seq, 
-                        args.pca_groups,
-                        args.ignore_rare/100.,
-                        args.prior_weight))
-                elif args.scheme == "second_maximum":
-                    current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='maximum'))
-                elif args.scheme == "second_minimum":
-                    current_seqs.append(optim.second(gs, str_seq, args.ignore_rare/100., mode='minimum'))
-                elif args.scheme == "demo":
-                    current_seqs.extend(optim.second_demo(gs, str_seq, args.ignore_rare/100.))
+            o = optim.Optimisation(gs, title, str_seq, args.scheme, args.groups,
+                                   args.ignore_rare, args.versions,
+                                   args.exclude, args.upstream,
+                                   args.downstream, args.override,
+                                   args.prior_weight)
 
-                if args.versions > 1:
-                    current_seqs = [("{}.v{}".format(n, v), s) for n,s in current_seqs]
+            o.run()
+            optimisations.append(o)
 
-                current_seqs = [(n, args.upstream + override(args.override, s) + args.downstream) for
-                                n,s in current_seqs]
-                
-                current_seqs = [(n,s) for n,s in current_seqs if
-                                valid(args.exclude,s)]
-
-                sequences.extend(current_seqs)
-
-        if not args.amino:
-            save_score_figs(gs, head, title, args.scheme, 
-                    [('original',str(sr.seq)),] + sequences)
-        else:
-            save_score_figs(gs, head, title, args.scheme, 
-                    sequences)
-
-        pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=args.prior_weight)
-        for name, seq in sequences:
-            pca.add_sequence(name, seq)
-        if not args.amino:
-            pca.add_sequence('original', str(sr.seq))
-            order = [gs.name(), 'original',]+[s[0] for s in sequences]
-        else:
-            order = [gs.name(), ]+[s[0] for s in sequences]
-
-        #dirty hack
-        cmap = plt.get_cmap()
-        cols = [cmap(i/float(len(order)-1)) for i in range(len(order)-1)]
-        ax = pca.plot(order=order,
-                colors=['gray',] + cols)
-        if args.scheme == 'PCA':
-            #draw the circles
-            for (n,x,y,r),c in zip(args.pca_groups, cols):
-                ax.add_patch(mpatches.Circle((x,y), r, fill=False, color=c))
-        ax.figure.savefig(os.path.join(head, title + ".PCA.png"))
-
-        print("Generated {} sequences".format(len(sequences)))
-        for name, out_str in sequences:
-            ofile = os.path.join(head, title + "." + name + ".fasta")
+    for o in optimisations:
+        for name, out_str in zip(o.get_names(), o.get_results()):
+            ofile = os.path.join(args.output_folder, name + ".fasta")
             out_sr = SeqRecord(Seq(out_str, Alphabet.generic_dna),
-                    id = sr.id,
-                    name=sr.name,
-                    description=sr.description)
+                               id = name,
+                               name=name)
             SeqIO.write(out_sr, ofile, "fasta")
 
 if __name__ == '__main__':

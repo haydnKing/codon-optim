@@ -66,8 +66,6 @@ def _second(so, AAseq, codons, mode='rand'):
 			elif mode == 'minimum':
 				p.index = range(len(p))
 				oseq.append(codons[aa].pop(np.argmin(p)))
-
-			
 	return ''.join(oseq)
 
 
@@ -143,22 +141,21 @@ def _generate_codons(AAseq, bias, cutoff=0.):
 	return out
 
 def by_PCA(gs, 
-					 AAseq, 
-					 pca_groups,
-					 rare_codon_cutoff=0.,
-					 prior_weight=1.,
-					 mode='rand'):
+           AAseq, 
+           pca_groups,
+           rare_codon_cutoff=0.,
+           prior_weight=1.,
+           mode='rand'):
 	
-	ret = []
+    ret = []
 
-	pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,
-																												prior_weight=prior_weight)
+    pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,                                                          prior_weight=prior_weight)
 
-	for name, x, y, r in pca_groups:
-		indexes = pca.label_from_circle(name,x,y,r)
-		codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
-		oseq = _second(gs.so(), AAseq, codons, mode)
-		ret.append(('PCA.{}'.format(name), _verify(AAseq, oseq),))
+    for name, x, y, r in pca_groups:
+        indexes = pca.label_from_circle(name,x,y,r)
+        codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
+        oseq = _second(gs.so(), AAseq, codons, mode)
+        ret.append(('PCA.{}'.format(name), _verify(AAseq, oseq),))
 
 	#ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
 	#ax.figure.show()
@@ -204,3 +201,101 @@ def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 
 	print("best_delta = {}".format(best_delta))
 	return [('good', _verify(AAseq, best_good),), ('bad', _verify(AAseq, best_bad))]
+
+class Optimisation:
+    """Hold all the details of an optimisation run"""
+
+    def __init__(self, genomestate, name, seq, scheme, groups=[], rare_cutoff=0., versions=1, 
+                 exclude=[], upstream="", downstream="", override=[],
+                 prior_weight=1.0):
+        self.name = name
+        self.original = seq
+        self.scheme = scheme
+        self.groups = groups
+        self.rare_cutoff = rare_cutoff
+        self.versions = versions
+        self.exclude = exclude
+        self.upstream = upstream
+        self.downstream = downstream
+        self.override = override
+        self.prior_weight = prior_weight
+        self.gs = genomestats
+
+    def run(self):
+        self.output = []
+        attempts = 0
+        while len(self.output) < self.versions:
+            seq = self._optimise()
+            if self._validate(seq):
+                self.output.append(seq)
+
+            attempts = attempts + 1
+            if attempts > 10 * self.versions:
+                print(("Failed to generate {} versions of '{}' "+
+                       "after {} attempts, got {} versions instead")
+                      .format(self.versions, 
+                              self.name, 
+                              attempts,
+                              len(self.output)))
+                break
+
+    def _optimise(self):
+        seq = ""
+        if self.scheme == "simple":
+            seq = simple(self.gs, 
+                         self.original, 
+                         self.rare_cutoff/100.)
+        elif self.scheme == "exact":
+            seq = exact(self.gs, 
+                        self.original, 
+                        self.rare_cutoff/100.)
+        elif self.scheme == "second_rand":
+            seq = second(self.gs, 
+                         self.original, 
+                         self.rare_cutoff/100., 
+                         mode='rand')
+        elif self.scheme == "groups":
+            seq = by_PCA(self.gs, 
+                         self.original, 
+                         self.groups,
+                         self.rare_cutoff/100.,
+                         self.prior_weight)
+        elif self.scheme == "second_maximum":
+            seq = second(self.gs, 
+                         self.original, 
+                         self.rare_cutoff/100., 
+                         mode='maximum')
+        elif self.scheme == "second_minimum":
+            seq = second(self.gs, 
+                         self.original, 
+                         self.rare_cutoff/100., 
+                         mode='minimum')
+
+        return self._override(seq)
+
+    def _override(self, seq):
+        if not self.override:
+            return seq
+        for i, cdn in self.override:
+            seq = seq[:3*(i-1)] + cdn + seq[3*i:]
+        return seq
+
+    def _validate(self, seq):
+        if not self.exclude:
+            return True
+        for e in self.exclude:
+            test_seq = (self.upstream[-len(e)+1:] + seq +
+                        self.downstream[:len(e)-1])
+            if (test_seq.find(e) >= 0 or 
+                test_seq.find(util.reverse_complement(e)) >= 0):
+                return False
+        return True
+
+    def get_results(self):
+        return [(self.upstream + o + self.downstream)
+                for o in self.output]
+
+    def get_names(self):
+        return ["{}.{}.v{}".format(self.name, self.scheme, i+1) 
+                for i in range(len(self.output))]
+
