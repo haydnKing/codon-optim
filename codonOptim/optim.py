@@ -21,13 +21,13 @@ def exact(gs, AAseq, rare_codon_cutoff=0.):
 		oseq.append(cdn)
 	oseq = ''.join(oseq)
 
-	return ('exact', _verify(AAseq, ret))
+	return _verify(AAseq, ret)
 
 def simple(gs, AAseq, rare_codon_cutoff=0.):
 
 	oseq = gs.emit(AAseq, rare_codon_cutoff)
 
-	return ('simple', _verify(AAseq, oseq))
+	return _verify(AAseq, oseq)
 
 def second(gs, AAseq, rare_codon_cutoff=0., mode='rand'):
 
@@ -36,7 +36,7 @@ def second(gs, AAseq, rare_codon_cutoff=0., mode='rand'):
 	
 	codons = _generate_codons(AAseq, gs.norm_bias(), cutoff=rare_codon_cutoff)
 	oseq = _second(gs.so(), AAseq, codons, mode)
-	return ('second.{}'.format(mode), _verify(AAseq, oseq))
+	return _verify(AAseq, oseq)
 
 
 def _second(so, AAseq, codons, mode='rand'):
@@ -100,67 +100,67 @@ def auto_PCA(gs,
 		
 		seq = _verify(AAseq, oseq)
 
-		ret.append(('s.class_{}'.format(name),seq))
+		ret.append(seq)
 	
 	return ret
 
 
 def _generate_codons(AAseq, bias, cutoff=0.):
-	"""Generate unordered codons to use for each amino acid present in AAseq 
-	such that the codon usage is as close as possible to bias."""
-	bias = util.normalise(bias)
+    """Generate unordered codons to use for each amino acid present in AAseq 
+    such that the codon usage is as close as possible to bias."""
+    bias = util.normalise(bias)
 
-	out = {}
-	for aa in util.AA:
-		#list all codons which could be used for this aa
-		cdn_list = [c for c in util.codon_table[aa] if bias[c] > cutoff]
-		#how many codons do we need for this aa?
-		count = len([1 for aas in AAseq if aas == aa])
-		#what number of each codon should we have?
-		counts = (bias[cdn_list] / np.sum(bias[cdn_list]))*count
+    out = {}
+    for aa in util.AA:
+        #list all codons which could be used for this aa
+        cdn_list = [c for c in util.codon_table[aa] if bias[c] > cutoff]
+        #how many codons do we need for this aa?
+        count = len([1 for aas in AAseq if aas == aa])
+        #what number of each codon should we have?
+        counts = (bias[cdn_list] / np.sum(bias[cdn_list]))*count
 
-		#sort by smallest residual
-		counts = pd.DataFrame({'c':counts, 
-													 'r':np.abs(counts-np.around(counts))
-													 }).sort_values(by='r')['c']
-		#assign integers
-		overflow = 0.
-		icounts = pd.Series(np.zeros(len(counts), dtype=int), index=counts.index)
-		for i in range(len(counts)):
-			icounts[i] = int(np.round(counts[i]+overflow))
-			overflow = overflow + counts[i] - icounts[i]
+        #sort by smallest residual
+        counts = pd.DataFrame({'c':counts, 
+                               'r':np.abs(counts-np.around(counts))
+                              }).sort_index(by='r')['c']
+        #assign integers
+        overflow = 0.
+        icounts = pd.Series(np.zeros(len(counts), dtype=int), index=counts.index)
+        for i in range(len(counts)):
+            icounts[i] = int(np.round(counts[i]+overflow))
+            overflow = overflow + counts[i] - icounts[i]
 
-		#list of codons
-		out[aa] = []
-		for cdn,count in icounts.iteritems():
-			out[aa] = out[aa] + [cdn,]*count
-		#shuffle the list (in some schemes, the codons are taken in list order
-		#when the genome lacks information)
-		np.random.shuffle(out[aa])
+        #list of codons
+        out[aa] = []
+        for cdn,count in icounts.iteritems():
+            out[aa] = out[aa] + [cdn,]*count
+            #shuffle the list (in some schemes, the codons are taken in list order
+            #when the genome lacks information)
+            np.random.shuffle(out[aa])
 
-	return out
+    return out
 
 def by_PCA(gs, 
            AAseq, 
-           pca_groups,
+           pca_group,
            rare_codon_cutoff=0.,
            prior_weight=1.,
            mode='rand'):
-	
+
     ret = []
 
-    pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,                                                          prior_weight=prior_weight)
+    pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=prior_weight)
 
-    for name, x, y, r in pca_groups:
-        indexes = pca.label_from_circle(name,x,y,r)
-        codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
-        oseq = _second(gs.so(), AAseq, codons, mode)
-        ret.append(('PCA.{}'.format(name), _verify(AAseq, oseq),))
+    name, x, y, r = pca_group
+    indexes = pca.label_from_circle(name,x,y,r)
+    codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
+    oseq = _second(gs.so(), AAseq, codons, mode)
+    ret.append(_verify(AAseq, oseq))
 
-	#ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
-	#ax.figure.show()
+    #ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
+    #ax.figure.show()
 
-	return ret
+    return ret
 
 def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 
@@ -205,7 +205,7 @@ def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 class Optimisation:
     """Hold all the details of an optimisation run"""
 
-    def __init__(self, genomestate, name, seq, scheme, groups=[], rare_cutoff=0., versions=1, 
+    def __init__(self, genomestats, name, seq, scheme, groups=[], rare_cutoff=0., versions=1, 
                  exclude=[], upstream="", downstream="", override=[],
                  prior_weight=1.0):
         self.name = name
@@ -254,10 +254,10 @@ class Optimisation:
                          self.original, 
                          self.rare_cutoff/100., 
                          mode='rand')
-        elif self.scheme == "groups":
+        elif self.scheme == "group":
             seq = by_PCA(self.gs, 
                          self.original, 
-                         self.groups,
+                         self.group,
                          self.rare_cutoff/100.,
                          self.prior_weight)
         elif self.scheme == "second_maximum":
@@ -292,7 +292,7 @@ class Optimisation:
         return True
 
     def get_results(self):
-        return [(self.upstream + o + self.downstream)
+        return [self.upstream + o + self.downstream
                 for o in self.output]
 
     def get_names(self):

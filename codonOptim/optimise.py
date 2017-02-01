@@ -20,7 +20,7 @@ def get_arguments():
             default="simple",
             choices=["simple",
                 "exact",
-                "groups",
+                "group",
                 "second_rand",
                 "second_maximum",
                 "second_minimum",
@@ -45,13 +45,17 @@ def get_arguments():
             "second order hypothesis. "+
             "\'demo\': generate good and bad second order sequences"
             )
-    parser.add_argument("--groups",
+    parser.add_argument("-p", "--prior_weight",
+                        required=False,
+                        type=float,
+                        default=1.0,
+                        help="Specify the prior weight for the PCA analysis")
+    parser.add_argument("--group",
             required=False,
-            type=lambda x: parse_pca_groups(x, parser),
+            type=lambda x: parse_group(x, parser),
             default='',
-            help="Specify the groups for optimisation based on a "+
-            "subset of the genes: "+
-            "G1NAME,G1x,G1y[;G2NAME,G2x,G2y[;G3 ...]]")
+            help="Specify the group for optimisation based on a "+
+            "subset of the genes: NAME,x,y,r")
     parser.add_argument("-r", "--ignore-rare", 
             required=False,
             type=float,
@@ -110,25 +114,24 @@ def get_arguments():
         if args.ignore_rare > 100 or args.ignore_rare < 0:
             raise ValueError("--ignore-rare must be within [0,100] not {}".format(args.ignore_rare))
 
-    if args.scheme == 'PCA':
-        if not args.pca_groups:
-            raise ValueError("argument --pca-groups is required for --scheme=PCA")
+    if args.scheme == 'group':
+        if not args.group:
+            raise ValueError("argument --group is required for --scheme=group")
 
     return args
 
-def parse_pca_groups(s, parser):
+def parse_group(s, parser):
     if not s:
         return []
     ret = []
-    groups = s.split(';')
-    for g in groups:
-        v = g.split(',')
-        if len(v) != 4:
-            raise parser.error("pca-groups: group spec should include name,x,y,radius \"{}\"".format(g))
-        try:
-            ret.append((v[0], float(v[1]), float(v[2]), float(v[3]),))
-        except ValueError as e:
-            raise parser.error("pca-groups: {}".format(e.args[0]))
+
+    v = s.split(',')
+    if len(v) != 4:
+        raise parser.error("pca-groups: group spec should include name,x,y,radius \"{}\"".format(g))
+    try:
+        ret.extend((v[0], float(v[1]), float(v[2]), float(v[3]),))
+    except ValueError as e:
+        raise parser.error("pca-groups: {}".format(e.args[0]))
     return ret
 
 def parse_DNA(s, parser):
@@ -148,7 +151,7 @@ def parse_DNA_list(s, parser):
 def parse_codons(s, parser):
     r = []
     for l,cdn in [x.split(':') for x in s.split(',')]:
-        v = (int(l), parse_DNA(cdn))
+        v = (int(l), parse_DNA(cdn, parser))
         if len(v[1]) != 3:
             raise parser.error("codons must be of length 3")
         r.append(v)
@@ -188,7 +191,7 @@ def main():
         if not os.path.isdir(args.output_folder):
             resp = ''
             while resp.upper() not in ['Y','N',]:
-                resp = input(("Output directory \'{}\' doesn't exist. "+
+                resp = raw_input(("Output directory \'{}\' doesn't exist. "+
                     "Create it? [Y/N]: ").format(args.output_folder))
                 if resp.upper() == 'Y':
                     os.mkdir(args.output_folder)
@@ -206,6 +209,7 @@ def main():
     optimisations = []
 
     for filename in args.gene_sequence:
+        print("loading {}".format(filename))
         seq_records = util.load_sequence(filename)
         head,tail = os.path.split(filename)
         title,ext = os.path.splitext(tail)
@@ -222,7 +226,7 @@ def main():
             else:
                 str_seq = str(sr.seq).upper()
 
-            o = optim.Optimisation(gs, title, str_seq, args.scheme, args.groups,
+            o = optim.Optimisation(gs, title, str_seq, args.scheme, args.group,
                                    args.ignore_rare, args.versions,
                                    args.exclude, args.upstream,
                                    args.downstream, args.override,
@@ -236,7 +240,8 @@ def main():
             ofile = os.path.join(args.output_folder, name + ".fasta")
             out_sr = SeqRecord(Seq(out_str, Alphabet.generic_dna),
                                id = name,
-                               name=name)
+                               name=name,
+                               description="optimised")
             SeqIO.write(out_sr, ofile, "fasta")
 
 if __name__ == '__main__':
