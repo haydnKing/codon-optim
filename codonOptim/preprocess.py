@@ -30,7 +30,7 @@ def main():
 	name = os.path.splitext(os.path.split(args.genome)[1])[0]
 
 	print("Loading genome file...")
-	genome = load_sequence(args.genome)
+	genome = load_sequence(args.genome)[0]
 	print("Calculating Statistics...")
 	gs = GenomeStats.from_seqrecord(genome, featuretype=args.feature, name=name)
 	print("Saving to {} as {}".format(args.output_folder, name))
