@@ -205,13 +205,13 @@ def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 class Optimisation:
     """Hold all the details of an optimisation run"""
 
-    def __init__(self, genomestats, name, seq, scheme, groups=[], rare_cutoff=0., versions=1, 
+    def __init__(self, genomestats, name, seq, scheme, group=[], rare_cutoff=0., versions=1, 
                  exclude=[], upstream="", downstream="", override=[],
                  prior_weight=1.0):
         self.name = name
         self.original = seq
         self.scheme = scheme
-        self.groups = groups
+        self.group = group
         self.rare_cutoff = rare_cutoff
         self.versions = versions
         self.exclude = exclude
