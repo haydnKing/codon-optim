@@ -122,7 +122,7 @@ def _generate_codons(AAseq, bias, cutoff=0.):
         #sort by smallest residual
         counts = pd.DataFrame({'c':counts, 
                                'r':np.abs(counts-np.around(counts))
-                              }).sort_index(by='r')['c']
+                              }).sort_values(by='r')['c']
         #assign integers
         overflow = 0.
         icounts = pd.Series(np.zeros(len(counts), dtype=int), index=counts.index)
