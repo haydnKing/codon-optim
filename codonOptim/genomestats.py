@@ -19,10 +19,10 @@ class GenomeStats:
             self._normed = util.normalise(self._bias)
         else:
             self._normed = _ndata
-            if _nso is None:
-                self._so_normed = util.so_normalise(self._second_order)
-            else:
-                self._so_normed = _nso
+        if _nso is None:
+            self._so_normed = util.so_normalise(self._second_order)
+        else:
+            self._so_normed = _nso
 
     @classmethod
     def from_seqrecord(cls, sr, featuretype='CDS', name=None):
@@ -129,7 +129,7 @@ class GenomeStats:
     def so_score(self, seq):
         return util.so_score(self._so_normed, seq)
 
-    def plot_score(self, names=[], seqs=[], colors=None, order=1):
+    def plot_score(self, names=[], seqs=[], colors=None, order=1, ax=None):
         if order == 1:
             scores = self._scores['first']
         elif order == 2:
@@ -137,7 +137,8 @@ class GenomeStats:
         else:
             raise ValueError("order must be 1 or 2, not {}".format(order))
 
-        ax = plt.figure().gca()
+        if ax is None:
+            ax = plt.figure().gca()
 
         if colors is None:
             cmap = plt.get_cmap()
@@ -151,7 +152,7 @@ class GenomeStats:
                 score = self.score(seq)
             elif order == 2:
                 score = self.so_score(seq)
-                ax.axvline(score, color=color, label=name)
+            ax.axvline(score, color=color, label=name)
 
         ax.legend(loc=0)
 

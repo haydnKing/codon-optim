@@ -9,6 +9,7 @@ import Bio.Alphabet as Alphabet
 
 import argparse, os.path, os, numpy as np
 import matplotlib.pyplot as plt, matplotlib.patches as mpatches
+import matplotlib.gridspec as gridspec
 import optim, PCA, util
 
 def get_arguments():
@@ -173,11 +174,9 @@ def valid(exclude, seq):
             return False
     return True
 
-def save_score_figs(gs, head, title, scheme, seqs):
-    ax = gs.plot_score([s[0] for s in seqs], [s[1] for s in seqs])
-    ax.figure.savefig(os.path.join(head, "{}.s1.{}.png".format(title, scheme)))
-    ax = gs.plot_score([s[0] for s in seqs], [s[1] for s in seqs], order=2)
-    ax.figure.savefig(os.path.join(head, "{}.s2.{}.png".format(title, scheme)))
+def plot_scores(gs, names, seqs, order, ax=None):
+    gs.plot_score(names, seqs, order=order, ax=ax)
+    return ax
 
 def main():
 
@@ -220,13 +219,7 @@ def main():
                 head = args.output_folder
 
 
-            #get a translation
-            if not args.amino:
-                str_seq = util.translate(str(sr.seq).upper())
-            else:
-                str_seq = str(sr.seq).upper()
-
-            o = optim.Optimisation(gs, title, str_seq, args.scheme, args.group,
+            o = optim.Optimisation(gs, title, str(sr.seq), args.amino, args.scheme, args.group,
                                    args.ignore_rare, args.versions,
                                    args.exclude, args.upstream,
                                    args.downstream, args.override,
@@ -234,6 +227,33 @@ def main():
 
             o.run()
             optimisations.append(o)
+
+    #PCA plots
+    for o in optimisations:
+        for name, out in zip(o.get_names(), o.output):
+            pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs,
+                                                                  prior_weight=args.prior_weight)
+            labels = pca.labels()
+            if o.original:
+                pca.add_sequence("original", o.original)
+            pca.add_sequence("optimised", out)
+            gspec = gridspec.GridSpec(2,2)
+            fig = plt.figure()
+            pca.plot(order=labels+['original', 'optimised'],
+                     ax=fig.add_subplot(gspec[:,0]))
+            plot_scores(gs, 
+                        ['original', 'optimised'], 
+                        [o.original, out], 
+                        1, 
+                        ax=fig.add_subplot(gspec[0,1]))
+            plot_scores(gs, 
+                        ['original', 'optimised'], 
+                        [o.original, out], 
+                        2, 
+                        ax=fig.add_subplot(gspec[1,1]))
+            fig.suptitle(name)
+            fig.tight_layout()
+            fig.savefig(os.path.join(args.output_folder,"{}.png".format(name)))
 
     for o in optimisations:
         for name, out_str in zip(o.get_names(), o.get_results()):

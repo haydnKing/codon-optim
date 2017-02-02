@@ -147,20 +147,13 @@ def by_PCA(gs,
            prior_weight=1.,
            mode='rand'):
 
-    ret = []
-
     pca = PCA.PrincipalComponentAnalysis.from_GenomeStats(gs, prior_weight=prior_weight)
 
     name, x, y, r = pca_group
     indexes = pca.label_from_circle(name,x,y,r)
     codons = _generate_codons(AAseq, gs.get_bias(indexes), cutoff=rare_codon_cutoff)
     oseq = _second(gs.so(), AAseq, codons, mode)
-    ret.append(_verify(AAseq, oseq))
-
-    #ax = pca.plot(order=[gs.name(),] + [g[0] for g in pca_groups])
-    #ax.figure.show()
-
-    return ret
+    return _verify(AAseq, oseq)
 
 def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 
@@ -205,11 +198,16 @@ def second_demo(gs, AAseq, rare_codon_cutoff, repeat=500):
 class Optimisation:
     """Hold all the details of an optimisation run"""
 
-    def __init__(self, genomestats, name, seq, scheme, group=[], rare_cutoff=0., versions=1, 
+    def __init__(self, genomestats, name, seq, amino, scheme, group=[], rare_cutoff=0., versions=1, 
                  exclude=[], upstream="", downstream="", override=[],
                  prior_weight=1.0):
         self.name = name
-        self.original = seq
+        if not amino:
+            self.original = seq
+            self.aseq = util.translate(seq)
+        else:
+            self.original = ""
+            self.aseq = seq
         self.scheme = scheme
         self.group = group
         self.rare_cutoff = rare_cutoff
@@ -243,31 +241,31 @@ class Optimisation:
         seq = ""
         if self.scheme == "simple":
             seq = simple(self.gs, 
-                         self.original, 
+                         self.aseq, 
                          self.rare_cutoff/100.)
         elif self.scheme == "exact":
             seq = exact(self.gs, 
-                        self.original, 
+                        self.aseq, 
                         self.rare_cutoff/100.)
         elif self.scheme == "second_rand":
             seq = second(self.gs, 
-                         self.original, 
+                         self.aseq, 
                          self.rare_cutoff/100., 
                          mode='rand')
         elif self.scheme == "group":
             seq = by_PCA(self.gs, 
-                         self.original, 
+                         self.aseq, 
                          self.group,
                          self.rare_cutoff/100.,
                          self.prior_weight)
         elif self.scheme == "second_maximum":
             seq = second(self.gs, 
-                         self.original, 
+                         self.aseq, 
                          self.rare_cutoff/100., 
                          mode='maximum')
         elif self.scheme == "second_minimum":
             seq = second(self.gs, 
-                         self.original, 
+                         self.aseq, 
                          self.rare_cutoff/100., 
                          mode='minimum')
 
